@@ -18,6 +18,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Android: al abrir el teclado la página se encoge (iOS lo ignora; ahí lo resuelve la hoja con visualViewport)
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f9f9fb" },
     { media: "(prefers-color-scheme: dark)", color: "#0f0f12" },

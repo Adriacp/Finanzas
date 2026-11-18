@@ -50,12 +50,12 @@ export function MerchantPicker({ value, onChange, id }: {
     <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }} desktop={desktop} title="Comercio" trigger={trigger}
       contentClassName="w-[var(--radix-popover-trigger-width)] min-w-64 p-0">
       <Command shouldFilter={false} loop className="outline-none">
-        <div className="flex items-center gap-2 border-b border-border px-3">
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <Command.Input value={q} onValueChange={setQ} autoFocus={desktop} placeholder="Buscar o añadir comercio…"
             className="h-11 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
         </div>
-        <Command.List className={cn("overflow-y-auto overscroll-contain p-1.5", desktop ? "max-h-72" : "max-h-[55dvh]")}>
+        <Command.List className={cn("overflow-y-auto overscroll-contain p-1.5", desktop && "max-h-72")}>
           {typed && !exact && (
             <Command.Item value="__new" onSelect={() => pick(typed.charAt(0).toUpperCase() + typed.slice(1), null)}
               className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-2.5 text-sm font-medium text-primary data-[selected=true]:bg-muted">

@@ -142,13 +142,13 @@ export function Select({ value, onChange, children, disabled, id, className, nam
     <Command ref={cmdRef} shouldFilter={false} loop value={active} onValueChange={setActive} tabIndex={-1} className="outline-none"
       onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       {searchable && (
-        <div className="flex items-center gap-2 border-b border-border px-3">
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <Command.Input value={q} onValueChange={setQ} autoFocus={desktop} placeholder="Buscar…"
             className="h-11 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
         </div>
       )}
-      <Command.List id={listId} className={cn("overflow-y-auto overscroll-contain p-1.5", desktop ? "max-h-72" : "max-h-[60dvh]")}>
+      <Command.List id={listId} className={cn("overflow-y-auto overscroll-contain p-1.5", desktop && "max-h-72")}>
         <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">Sin resultados</Command.Empty>
         {groups.map((g, gi) => (
           <Command.Group key={`${g.name ?? ""}-${gi}`} heading={g.name}
