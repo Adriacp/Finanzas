@@ -71,19 +71,10 @@ export class SupabaseRepository implements FinanceRepository {
     if (!profileRow) {
       profileRow = check(await this.sb.from("profiles").insert({ id: this.userId }).select().single());
     }
-    const [accounts, categories, transactions, budgets, recurring, goals, savedViews] = await Promise.all(
-      ENTITY_ORDER.map((e) => this.selectAll(e)),
-    );
-    return {
-      profile: fromRow<Profile>(profileRow as Record<string, unknown>),
-      accounts: accounts as EntityMap["accounts"][],
-      categories: categories as EntityMap["categories"][],
-      transactions: transactions as EntityMap["transactions"][],
-      budgets: budgets as EntityMap["budgets"][],
-      recurring: recurring as EntityMap["recurring"][],
-      goals: goals as EntityMap["goals"][],
-      savedViews: savedViews as EntityMap["savedViews"][],
-    };
+    // Cada resultado se asigna por nombre de entidad (no por posición) para evitar mezclar tablas.
+    const entries = await Promise.all(ENTITY_ORDER.map(async (e) => [e, await this.selectAll(e)] as const));
+    const byKey = Object.fromEntries(entries) as { [K in EntityKey]: EntityMap[K][] };
+    return { profile: fromRow<Profile>(profileRow as Record<string, unknown>), ...byKey };
   }
 
   async upsert<K extends EntityKey>(entity: K, row: EntityMap[K]): Promise<EntityMap[K]> {
