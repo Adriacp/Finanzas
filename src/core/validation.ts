@@ -112,4 +112,6 @@ export const productSchema = z.object({
   name: z.string().trim().min(1, "Escribe un nombre").max(80, "Máximo 80 caracteres"),
   unit: z.string().trim().min(1, "Elige una unidad").max(20),
   categoryId: id.nullable(),
+  parentId: id.nullable().optional(),
+  packageSize: z.number().positive("El formato debe ser mayor que 0").max(1e6).nullable().optional(),
 });

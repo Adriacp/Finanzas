@@ -37,8 +37,8 @@ En *Ajustes → Cargar datos de ejemplo* tienes 6 meses de datos realistas. **No
 ## 2. Configurar Supabase (persistencia real y multi-dispositivo)
 
 1. Crea un proyecto en <https://supabase.com> (el plan gratuito sirve).
-2. **SQL Editor → New query**: pega y ejecuta, en orden, `supabase/migrations/0001_init.sql` y `supabase/migrations/0002_products_balances.sql`
-   (la 0002 añade productos, desglose de movimientos y la confirmación de saldos; ambas se pueden ejecutar más de una vez sin problema).
+2. **SQL Editor → New query**: pega y ejecuta, en orden, `supabase/migrations/0001_init.sql`, `0002_products_balances.sql` y `0003_product_variants.sql`
+   (la 0002 añade productos, desglose y confirmación de saldos; la 0003, marcas/variantes y formato del envase; todas se pueden ejecutar más de una vez sin problema).
    Crea las tablas, índices, Row Level Security, el trigger de perfil y el bucket privado `receipts` para los tickets.
 3. **Project Settings → API**: copia la *Project URL* y la *anon public key* en `.env.local`:
 

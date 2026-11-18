@@ -39,6 +39,8 @@ export interface FinanceRepository {
    * La app sigue funcionando sin esas funciones y muestra un aviso.
    */
   readonly schemaOutdated?: boolean;
+  /** false si la BD aún no admite variantes/formatos de producto (migración 0003). */
+  readonly variantsSupported?: boolean;
   uploadAttachment(file: File): Promise<string>;
   attachmentUrl(path: string): Promise<string>;
   removeAttachment(path: string): Promise<void>;

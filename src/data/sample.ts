@@ -3,7 +3,7 @@ import { buildDefaultCategories, buildDefaultProducts } from "@/core/defaults";
 import { lineTotal } from "@/core/products";
 import { toISO } from "@/core/dates";
 import { round2 } from "@/core/money";
-import type { Account, Budget, Category, FinanceData, Goal, Recurring, Transaction, TransactionItem } from "@/core/types";
+import type { Account, Budget, Category, FinanceData, Goal, Product, Recurring, Transaction, TransactionItem } from "@/core/types";
 import { newId } from "./repository";
 
 /** Datos de ejemplo realistas (6 meses) para explorar la app en modo demo. */
@@ -59,6 +59,11 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
   // Catálogo y compras con desglose por productos (precio distinto según el súper)
   const products = buildDefaultProducts(newId, categories);
   const prod = (name: string) => products.find((p) => p.name === name)!;
+  // Producto genérico con marcas (variantes) de distinto formato, para comparar por litro
+  const energetica: Product = { id: newId(), name: "Bebida energética", unit: "l", categoryId: sub("Supermercado").subcategoryId, parentId: null, packageSize: null };
+  const brand = (name: string, packageSize: number): Product => ({ id: newId(), name, unit: "l", categoryId: energetica.categoryId, parentId: energetica.id, packageSize });
+  const ENERGY: Array<[Product, number]> = [[brand("Powerking", 1), 1.15], [brand("Monster", 0.5), 1.55], [brand("Red Bull", 0.25), 1.45], [brand("V", 0.5), 1.35]];
+  products.push(energetica, ...ENERGY.map(([p]) => p));
   const transactionItems: TransactionItem[] = [];
   const PRICE_FACTOR: Record<string, number> = { Mercadona: 1, Carrefour: 1.06, Lidl: 0.9, "Día": 0.96 };
   const BASKET: Array<[string, number, [number, number]]> = [
@@ -75,6 +80,15 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
       const unitPrice = round2(base * PRICE_FACTOR[shop] * between(0.96, 1.04));
       return { id: newId(), transactionId: txId, productId: prod(name).id, name, quantity, unitPrice, amount: lineTotal(quantity, unitPrice), sortOrder: i };
     });
+    // A veces, una bebida energética de alguna marca (se guarda en litros: 1 lata de 500 ml = 0,5 l)
+    if (rnd() > 0.6) {
+      const [brand, canPrice] = ENERGY[Math.floor(rnd() * ENERGY.length)];
+      const cans = rnd() > 0.7 ? 2 : 1;
+      const size = brand.packageSize!;
+      const unitPrice = Math.round(((canPrice * PRICE_FACTOR[shop] * between(0.97, 1.03)) / size) * 1e4) / 1e4;
+      const quantity = round2(cans * size);
+      items.push({ id: newId(), transactionId: txId, productId: brand.id, name: brand.name, quantity, unitPrice, amount: round2(quantity * unitPrice), sortOrder: items.length });
+    }
     // 3 de cada 4 compras llevan desglose; el resto solo el total (el desglose es opcional)
     const withItems = rnd() > 0.25;
     if (withItems) transactionItems.push(...items);

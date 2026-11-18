@@ -87,3 +87,50 @@ describe("comercios", () => {
     expect(suggestFromMerchant("Desconocido", txs)).toBeNull();
   });
 });
+
+describe("variantes y formatos", () => {
+  it("convierte formatos a la unidad del producto y los muestra legibles", async () => {
+    const { toBaseUnit, formatPackage, packageUnitsFor } = await import("./products");
+    expect(toBaseUnit(500, "ml", "l")).toBe(0.5);
+    expect(toBaseUnit(33, "cl", "l")).toBe(0.33);
+    expect(toBaseUnit(250, "g", "kg")).toBe(0.25);
+    expect(toBaseUnit(6, "ud", "docena")).toBe(0.5);
+    expect(formatPackage(0.5, "l")).toBe("500 ml");
+    expect(formatPackage(1.5, "l")).toBe("1,5 l");
+    expect(formatPackage(0.5, "docena")).toBe("6 ud");
+    expect(packageUnitsFor("ud").map((u) => u.unit)).toEqual(["ud"]);
+  });
+
+  it("sugiere la unidad por el nombre", async () => {
+    const { guessUnit } = await import("./products");
+    expect(guessUnit("Leche entera")).toBe("l");
+    expect(guessUnit("Bebida energética")).toBe("l");
+    expect(guessUnit("Plátanos de Canarias")).toBe("kg");
+    expect(guessUnit("Huevos camperos")).toBe("docena");
+    expect(guessUnit("Cuaderno")).toBe("ud");
+  });
+
+  it("compara la energética en general y cada marca por separado (en €/l)", async () => {
+    const { productStats, withVariants } = await import("./products");
+    const energetica: Product = { id: "ene", name: "Bebida energética", unit: "l", categoryId: null };
+    const powerking: Product = { id: "pk", name: "Powerking", unit: "l", categoryId: null, parentId: "ene", packageSize: 1 };
+    const v: Product = { id: "v", name: "V", unit: "l", categoryId: null, parentId: "ene", packageSize: 0.5 };
+    const spar = tx({ merchant: "Spar", date: "2026-11-18" });
+    const supermacher = tx({ merchant: "Supermacher", date: "2026-11-19" });
+    const spar2 = tx({ merchant: "Spar", date: "2026-11-20" });
+    // Powerking 1 l a 1,20 € → 1,20 €/l ; V 500 ml a 1,50 € → 3,00 €/l ; V en Spar a 1,40 € → 2,80 €/l
+    const items = [item(spar.id, "pk", "Powerking", 1, 1.2), item(supermacher.id, "v", "V", 0.5, 3), item(spar2.id, "v", "V", 0.5, 2.8)];
+    const stats = productStats([energetica, powerking, v], items, [spar, supermacher, spar2]);
+    const gen = stats.find((s) => s.product.id === "ene")!;
+    expect(gen.count).toBe(3); // incluye las compras de todas las marcas
+    expect(gen.quantity).toBe(2); // 1 l + 0,5 l + 0,5 l
+    expect(gen.avgUnitPrice).toBe(2.05); // (1,20 + 1,50 + 1,40) / 2 l
+    expect(gen.variants.map((x) => [x.product.name, x.avgUnitPrice])).toEqual([["Powerking", 1.2], ["V", 2.9]]);
+    expect(gen.variants[1].cheapestMerchant).toEqual({ merchant: "Spar", avgUnitPrice: 2.8 });
+    const vStat = stats.find((s) => s.product.id === "v")!;
+    expect(vStat.count).toBe(2); // la marca solo con sus propias compras
+    expect(vStat.cheapestMerchant?.merchant).toBe("Spar");
+    expect(vStat.variants).toEqual([]);
+    expect(withVariants(["ene"], [energetica, powerking, v]).sort()).toEqual(["ene", "pk", "v"]);
+  });
+});

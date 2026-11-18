@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { countActiveFilters, filterTransactions, sortTransactions } from "@/core/filters";
 import { allTags } from "@/core/insights";
-import { itemsByTransaction } from "@/core/products";
+import { itemsByTransaction, withVariants } from "@/core/products";
 import type { TxFilters, TxStatus, TxType } from "@/core/types";
 import { newId } from "@/data/repository";
 import { useData, useFinance } from "@/store/finance-store";
@@ -55,7 +55,9 @@ function TransactionsInner() {
   useEffect(() => { setLimit(PAGE); }, [filters]);
 
   const itemsMap = useMemo(() => itemsByTransaction(d.transactionItems), [d.transactionItems]);
-  const results = useMemo(() => sortTransactions(filterTransactions(d.transactions, filters, d.categories, d.accounts, itemsMap)), [d, filters, itemsMap]);
+  // Filtrar por un producto genérico incluye todas sus marcas/variantes
+  const effectiveFilters = useMemo(() => (filters.productIds?.length ? { ...filters, productIds: withVariants(filters.productIds, d.products) } : filters), [filters, d.products]);
+  const results = useMemo(() => sortTransactions(filterTransactions(d.transactions, effectiveFilters, d.categories, d.accounts, itemsMap)), [d, effectiveFilters, itemsMap]);
   const totals = useMemo(() => {
     let inc = 0, exp = 0;
     for (const t of results) { if (t.type === "income") inc += t.amount; if (t.type === "expense") exp += t.amount; if (t.type === "refund") exp -= t.amount; }
@@ -194,7 +196,15 @@ function FiltersDialog({ open, onOpenChange, value, onChange }: { open: boolean;
         <Field label="Producto">
           <Select value={f.productIds?.[0] ?? ""} onChange={(e) => setF({ ...f, productIds: e.target.value ? [e.target.value] : undefined })}>
             <option value="">Todos</option>
-            {[...d.products].sort((a, b) => a.name.localeCompare(b.name, "es")).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {[...d.products].filter((p) => !p.parentId).sort((a, b) => a.name.localeCompare(b.name, "es")).map((g) => {
+              const variants = d.products.filter((p) => p.parentId === g.id).sort((a, b) => a.name.localeCompare(b.name, "es"));
+              return variants.length ? (
+                <optgroup key={g.id} label={g.name}>
+                  <option value={g.id}>{g.name} (todas las marcas)</option>
+                  {variants.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </optgroup>
+              ) : <option key={g.id} value={g.id}>{g.name}</option>;
+            })}
           </Select>
         </Field>
         <Field label="Comercio"><Input value={f.merchant ?? ""} onChange={(e) => setF({ ...f, merchant: e.target.value || undefined })} /></Field>

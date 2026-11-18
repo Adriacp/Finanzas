@@ -176,7 +176,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {schemaOutdated && (
             <div className="mb-4 flex gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-3 text-sm">
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
-              <p>Hay funciones nuevas (productos y saldos) que necesitan actualizar la base de datos. Ejecuta en Supabase → SQL Editor el archivo <code className="text-xs">supabase/migrations/0002_products_balances.sql</code> y recarga.</p>
+              <p>Hay funciones nuevas que necesitan actualizar la base de datos. Ejecuta en Supabase → SQL Editor los archivos pendientes de <code className="text-xs">supabase/migrations</code> (0002 productos y saldos, 0003 variantes de producto) y recarga.</p>
             </div>
           )}
           <div key={path} className="animate-in">{children}</div>

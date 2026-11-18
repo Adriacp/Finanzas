@@ -33,6 +33,8 @@ interface FinanceState {
   saveTransaction(tx: Transaction, items?: TransactionItem[]): Promise<BudgetStatus[]>;
   /** La BD aún no tiene las tablas de la migración 0002 (productos/desglose). */
   schemaOutdated: boolean;
+  /** La BD admite variantes y formatos de producto (migración 0003). */
+  variantsSupported: boolean;
   reset(): void;
 }
 
@@ -114,6 +116,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     error: null,
     data: null,
     schemaOutdated: false,
+    variantsSupported: true,
 
     async init(r) {
       set({ repo: r, status: "loading", error: null });
@@ -131,7 +134,7 @@ export const useFinance = create<FinanceState>((set, get) => {
           // Si la reparación falla, se sigue con los datos tal cual (se reintentará en el próximo arranque).
           data = await r.loadAll();
         }
-        set({ data, status: "ready", schemaOutdated: !!r.schemaOutdated });
+        set({ data, status: "ready", schemaOutdated: !!r.schemaOutdated, variantsSupported: r.variantsSupported !== false });
       } catch (e) {
         set({ status: "error", error: errMsg(e) });
       }
@@ -140,7 +143,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     async reload() {
       try {
         const data = await repo().loadAll();
-        set({ data, status: "ready", error: null, schemaOutdated: !!repo().schemaOutdated });
+        set({ data, status: "ready", error: null, schemaOutdated: !!repo().schemaOutdated, variantsSupported: repo().variantsSupported !== false });
       } catch (e) {
         set({ error: errMsg(e) });
       }

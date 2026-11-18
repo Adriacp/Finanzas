@@ -119,9 +119,13 @@ export interface Recurring {
 export interface Product {
   id: ID;
   name: string;
-  /** Unidad de precio: ud, kg, l, docena, paquete… */
+  /** Unidad en la que se mide y compara el precio: ud, kg, l, docena, paquete… (las variantes heredan la del genérico) */
   unit: string;
   categoryId: ID | null;
+  /** Si es una variante/marca (p. ej. «V»), el producto genérico al que pertenece («Bebida energética») */
+  parentId?: ID | null;
+  /** Contenido de un envase en la unidad del producto (p. ej. 0,5 para una lata de 500 ml medida en litros) */
+  packageSize?: number | null;
 }
 
 /** Línea del desglose de un movimiento (opcional). */

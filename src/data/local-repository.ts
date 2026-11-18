@@ -84,7 +84,10 @@ export class LocalRepository implements FinanceRepository {
     }
     if (entity === "recurring") d.transactions = d.transactions.map((t) => (del.has(t.recurringId ?? "") ? { ...t, recurringId: null } : t));
     if (entity === "transactions") d.transactionItems = d.transactionItems.filter((i) => !del.has(i.transactionId)); // cascade
-    if (entity === "products") d.transactionItems = d.transactionItems.map((i) => (del.has(i.productId ?? "") ? { ...i, productId: null } : i));
+    if (entity === "products") {
+      d.transactionItems = d.transactionItems.map((i) => (del.has(i.productId ?? "") ? { ...i, productId: null } : i));
+      d.products = d.products.map((p) => (del.has(p.parentId ?? "") ? { ...p, parentId: null } : p)); // variantes → genéricos
+    }
     if (entity === "categories") d.products = d.products.map((p) => (del.has(p.categoryId ?? "") ? { ...p, categoryId: null } : p));
     (d[entity] as EntityMap[K][]) = (d[entity] as EntityMap[K][]).filter((x) => !del.has(x.id));
     this.write();

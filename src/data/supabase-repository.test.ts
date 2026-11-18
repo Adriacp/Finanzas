@@ -20,6 +20,8 @@ function fakeClient(): SupabaseClient {
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: profile, error: null }) }),
           order: () => ({ range: async () => ({ data: tables[table] ?? [], error: null }) }),
+          // comprobación de columnas de variantes (migración 0003)
+          limit: async () => ({ data: [], error: null }),
         }),
       };
     },

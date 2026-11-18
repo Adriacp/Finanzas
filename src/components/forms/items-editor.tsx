@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { normalize } from "@/core/insights";
 import { parseAmount, round2 } from "@/core/money";
-import { findProductByName, itemsTotal, lastUnitPrice, lineTotal, productsByUsage } from "@/core/products";
+import { findProductByName, formatPackage, itemsTotal, lastUnitPrice, lineTotal, productsByUsage } from "@/core/products";
+import { ProductDialog } from "./product-dialog";
 import type { Product, TransactionItem } from "@/core/types";
 import { newId } from "@/data/repository";
 import { useData, useFinance } from "@/store/finance-store";
@@ -122,29 +123,50 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
   onRemove: () => void;
   history: ReturnType<typeof useData>;
 }) {
+  const fmt = useMoney();
+  // Producto con formato (p. ej. lata de 500 ml): se apuntan envases y precio por envase,
+  // pero se guarda la cantidad en la unidad del producto (0,5 l) y el precio por esa unidad (€/l)
+  const product = history.products.find((p) => p.id === item.productId);
+  const unit = product?.unit ?? "ud";
+  const size = product?.packageSize && product.packageSize > 0 ? product.packageSize : null;
+  const packs = size ? item.quantity / size : item.quantity;
+  const packPrice = size ? item.unitPrice * size : item.unitPrice;
+
   // Texto mientras se escribe; el resto del tiempo se muestran los valores calculados
   const [editing, setEditing] = useState<{ field: "q" | "p" | "t"; text: string } | null>(null);
-  const shown = (field: "q" | "p" | "t", value: number) =>
-    editing?.field === field ? editing.text : value ? (field === "q" ? num(value, 3) : num(value, field === "p" ? 3 : 2, 2)) : "";
+  const shown = (field: "q" | "p" | "t") => {
+    if (editing?.field === field) return editing.text;
+    if (field === "q") return packs ? num(packs, 3) : "";
+    if (field === "p") return packPrice ? num(packPrice, 3, 2) : "";
+    return item.amount ? num(item.amount, 2, 2) : "";
+  };
 
   function onType(field: "q" | "p" | "t", text: string) {
     setEditing({ field, text });
     const v = parseAmount(text);
     if (v === null) return;
-    if (field === "q" && v > 0) onChange({ quantity: v, amount: lineTotal(v, item.unitPrice) });
     if (field === "p" || field === "t") onManual();
-    if (field === "p") onChange({ unitPrice: v, amount: lineTotal(item.quantity, v) });
+    if (field === "q" && v > 0) {
+      const quantity = size ? Math.round(v * size * 1e6) / 1e6 : v;
+      onChange({ quantity, amount: size ? round2(v * packPrice) : lineTotal(quantity, item.unitPrice) });
+    }
+    if (field === "p") {
+      const unitPrice = size ? Math.round((v / size) * 1e4) / 1e4 : v;
+      onChange({ unitPrice, amount: size ? round2(packs * v) : lineTotal(item.quantity, v) });
+    }
     if (field === "t") onChange({ amount: round2(v), unitPrice: item.quantity > 0 ? Math.round((v / item.quantity) * 1e4) / 1e4 : v });
   }
 
   const pickProduct = (p: Product) => {
-    const last = lastUnitPrice(p.id, history.transactionItems, history.transactions);
+    // Se mantienen los envases/unidades apuntados y se pasan al formato del nuevo producto
+    const newSize = p.packageSize && p.packageSize > 0 ? p.packageSize : null;
+    const quantity = newSize ? Math.round((packs || 1) * newSize * 1e6) / 1e6 : packs || 1;
     // En la línea automática manda el importe; en las demás se propone el último precio pagado
-    if (isAuto) return onChange({ productId: p.id, name: p.name });
-    const unitPrice = item.unitPrice || last || 0;
-    onChange({ productId: p.id, name: p.name, unitPrice, amount: lineTotal(item.quantity, unitPrice) });
+    if (isAuto) return onChange({ productId: p.id, name: p.name, quantity });
+    const last = lastUnitPrice(p.id, history.transactionItems, history.transactions);
+    const unitPrice = last ?? item.unitPrice ?? 0;
+    onChange({ productId: p.id, name: p.name, quantity, unitPrice, amount: lineTotal(quantity, unitPrice) });
   };
-  const unit = history.products.find((p) => p.id === item.productId)?.unit ?? "ud";
 
   return (
     <div className="rounded-xl border border-border p-2 animate-in">
@@ -154,23 +176,28 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
       </div>
       <div className="mt-1.5 grid grid-cols-[1fr_1.2fr_1.2fr] gap-1.5">
         <label className="min-w-0">
-          <span className="mb-0.5 block text-[10px] text-muted-foreground">Cantidad ({unit})</span>
-          <input inputMode="decimal" className={inputCls} value={shown("q", item.quantity)} placeholder="1"
-            onFocus={() => setEditing({ field: "q", text: num(item.quantity, 3) })} onChange={(e) => onType("q", e.target.value)} onBlur={() => setEditing(null)} />
+          <span className="mb-0.5 block truncate text-[10px] text-muted-foreground">{size ? `Envases (${formatPackage(size, unit)})` : `Cantidad (${unit})`}</span>
+          <input inputMode="decimal" className={inputCls} value={shown("q")} placeholder="1"
+            onFocus={() => setEditing({ field: "q", text: num(packs, 3) })} onChange={(e) => onType("q", e.target.value)} onBlur={() => setEditing(null)} />
         </label>
         <label className="min-w-0">
-          <span className="mb-0.5 block text-[10px] text-muted-foreground">Precio / {unit}</span>
-          <input inputMode="decimal" className={inputCls} value={shown("p", item.unitPrice)} placeholder="0,00"
-            onFocus={() => setEditing({ field: "p", text: item.unitPrice ? num(item.unitPrice, 3) : "" })} onChange={(e) => onType("p", e.target.value)} onBlur={() => setEditing(null)} />
+          <span className="mb-0.5 block truncate text-[10px] text-muted-foreground">{size ? "Precio / envase" : `Precio / ${unit}`}</span>
+          <input inputMode="decimal" className={inputCls} value={shown("p")} placeholder="0,00"
+            onFocus={() => setEditing({ field: "p", text: packPrice ? num(packPrice, 3) : "" })} onChange={(e) => onType("p", e.target.value)} onBlur={() => setEditing(null)} />
         </label>
         <label className="min-w-0">
           <span className="mb-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
             Total {isAuto && <span className="rounded bg-accent px-1 font-medium text-accent-foreground" title="Lo que falta del importe">auto</span>}
           </span>
-          <input inputMode="decimal" className={cn(inputCls, "font-semibold")} value={shown("t", item.amount)} placeholder="0,00"
+          <input inputMode="decimal" className={cn(inputCls, "font-semibold")} value={shown("t")} placeholder="0,00"
             onFocus={() => setEditing({ field: "t", text: item.amount ? num(item.amount, 2) : "" })} onChange={(e) => onType("t", e.target.value)} onBlur={() => setEditing(null)} />
         </label>
       </div>
+      {size && item.quantity > 0 && (
+        <p className="mt-1 px-0.5 text-[11px] text-muted-foreground tabular">
+          = {num(item.quantity, 3)} {unit}{item.unitPrice > 0 && <> · <b className="text-foreground">{fmt(item.unitPrice)}/{unit}</b></>}
+        </p>
+      )}
     </div>
   );
 }
@@ -178,30 +205,26 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
 /** Selector de producto con buscador; si no existe, permite crearlo al momento. */
 function ProductPicker({ value, name, onPick }: { value: string | null; name: string; onPick: (p: Product) => void }) {
   const d = useData();
-  const save = useFinance((s) => s.save);
   const desktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [creating, setCreating] = useState<string | null>(null);
+  const parentName = useMemo(() => new Map(d.products.map((p) => [p.id, p.name])), [d.products]);
   const sorted = useMemo(() => productsByUsage(d.products, d.transactionItems), [d.products, d.transactionItems]);
   const shown = useMemo(() => {
     const n = normalize(q);
-    return (n ? sorted.filter((p) => normalize(p.name).includes(n)) : sorted).slice(0, 80);
-  }, [sorted, q]);
+    // Busca también por el producto genérico: «energética» muestra Powerking y V
+    return (n ? sorted.filter((p) => normalize(`${p.name} ${p.parentId ? parentName.get(p.parentId) ?? "" : ""}`).includes(n)) : sorted).slice(0, 80);
+  }, [sorted, q, parentName]);
   const exact = q.trim() ? findProductByName(d.products, q) : undefined;
 
-  async function create() {
+  /** Crear abre el diálogo para elegir unidad, si es variante de otro producto y su formato */
+  function create() {
     const nameNew = q.trim().slice(0, 80);
     if (!nameNew) return;
-    const p: Product = { id: newId(), name: nameNew.charAt(0).toUpperCase() + nameNew.slice(1), unit: "ud", categoryId: null };
-    try {
-      await save("products", p);
-      toast.success(`Producto «${p.name}» creado`);
-      onPick(p);
-      setOpen(false);
-      setQ("");
-    } catch (e) {
-      toast.error("No se pudo crear el producto", { description: (e as Error).message });
-    }
+    setOpen(false);
+    setQ("");
+    setCreating(nameNew);
   }
 
   const trigger = (
@@ -214,6 +237,7 @@ function ProductPicker({ value, name, onPick }: { value: string | null; name: st
   );
 
   return (
+    <>
     <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }} desktop={desktop} title="Producto" trigger={trigger}
       contentClassName="w-[var(--radix-popover-trigger-width)] min-w-64 p-0">
       <Command shouldFilter={false} loop className="outline-none">
@@ -233,13 +257,20 @@ function ProductPicker({ value, name, onPick }: { value: string | null; name: st
           {shown.map((p) => (
             <Command.Item key={p.id} value={p.id} onSelect={() => { onPick(p); setOpen(false); setQ(""); }}
               className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-2.5 text-sm data-[selected=true]:bg-muted", !desktop && "min-h-12")}>
-              <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              <span className="text-xs text-muted-foreground">{p.unit}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{p.name}</span>
+                {p.parentId && <span className="block truncate text-xs text-muted-foreground">{parentName.get(p.parentId)}</span>}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">{p.packageSize ? formatPackage(p.packageSize, p.unit) : p.unit}</span>
               {p.id === value && <Check className="size-4 text-primary" />}
             </Command.Item>
           ))}
         </Command.List>
       </Command>
     </ResponsivePicker>
+    {/* Fuera del panel del selector: el panel se desmonta al cerrarse */}
+    <ProductDialog open={creating !== null} onOpenChange={(o) => !o && setCreating(null)} initial={null} defaultName={creating ?? ""}
+      onSaved={(p) => { setCreating(null); onPick(p); }} />
+    </>
   );
 }

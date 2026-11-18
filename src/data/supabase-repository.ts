@@ -14,7 +14,7 @@ const TABLE: Record<EntityKey, string> = {
   transactionItems: "transaction_items",
 };
 
-const NUMERIC = new Set(["amount", "initialBalance", "targetAmount", "savedAmount", "monthlyBudget", "quantity", "unitPrice"]);
+const NUMERIC = new Set(["amount", "initialBalance", "targetAmount", "savedAmount", "monthlyBudget", "quantity", "unitPrice", "packageSize"]);
 const LOCAL_ONLY = new Set(["createdAt"]);
 
 const snake = (k: string) => k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
@@ -48,7 +48,7 @@ function check<T>(res: { data: T; error: { message: string } | null }): T {
 const isMissingSchema = (msg: string) => /schema cache|does not exist|PGRST20[45]/i.test(msg);
 
 function translate(msg: string): string {
-  if (isMissingSchema(msg)) return "Falta actualizar la base de datos: ejecuta en Supabase la migración supabase/migrations/0002_products_balances.sql.";
+  if (isMissingSchema(msg)) return "Falta actualizar la base de datos: ejecuta en Supabase las migraciones pendientes de la carpeta supabase/migrations (0002 y 0003).";
   if (/JWT|not authenticated|401/i.test(msg)) return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (/violates row-level security/i.test(msg)) return "No tienes permiso para realizar esta acción.";
   if (/duplicate key/i.test(msg)) return "Ya existe un registro igual.";
@@ -61,6 +61,8 @@ const PAGE = 1000;
 export class SupabaseRepository implements FinanceRepository {
   readonly kind = "supabase" as const;
   schemaOutdated = false;
+  /** false si falta la migración 0003 (variantes y formatos de producto) */
+  variantsSupported = true;
   constructor(private sb: SupabaseClient, private userId: string) {}
 
   private async selectAll<K extends EntityKey>(entity: K): Promise<EntityMap[K][]> {
@@ -87,17 +89,29 @@ export class SupabaseRepository implements FinanceRepository {
     // Cada resultado se asigna por nombre de entidad (no por posición) para evitar mezclar tablas.
     const entries = await Promise.all(ENTITY_ORDER.map(async (e) => [e, await this.selectAll(e)] as const));
     const byKey = Object.fromEntries(entries) as { [K in EntityKey]: EntityMap[K][] };
+    // ¿Tiene ya la BD las columnas de variantes (migración 0003)?
+    if (!this.schemaOutdated) {
+      const probe = await this.sb.from("products").select("parent_id,package_size").limit(1);
+      if (probe.error && isMissingSchema(probe.error.message)) { this.variantsSupported = false; this.schemaOutdated = true; }
+    }
     return { profile: fromRow<Profile>(profileRow as Record<string, unknown>), ...byKey };
   }
 
+  /** Fila para escribir en la BD; sin las columnas de variantes si aún no existen. */
+  private dbRow<K extends EntityKey>(entity: K, row: EntityMap[K]): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...toRow(row), user_id: this.userId };
+    if (entity === "products" && !this.variantsSupported) { delete out.parent_id; delete out.package_size; }
+    return out;
+  }
+
   async upsert<K extends EntityKey>(entity: K, row: EntityMap[K]): Promise<EntityMap[K]> {
-    const data = check(await this.sb.from(TABLE[entity]).upsert({ ...toRow(row), user_id: this.userId }).select().single());
+    const data = check(await this.sb.from(TABLE[entity]).upsert(this.dbRow(entity, row)).select().single());
     return fromRow<EntityMap[K]>(data as Record<string, unknown>);
   }
 
   async insertMany<K extends EntityKey>(entity: K, rows: EntityMap[K][]): Promise<void> {
     for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500).map((r) => ({ ...toRow(r), user_id: this.userId }));
+      const chunk = rows.slice(i, i + 500).map((r) => this.dbRow(entity, r));
       check(await this.sb.from(TABLE[entity]).upsert(chunk));
     }
   }
