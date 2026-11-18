@@ -1,0 +1,11 @@
+echo "🔎 Comprobando tipos y tests antes de subir (npm run check)…"
+
+if ! npm run check --silent; then
+  echo ""
+  echo "❌ Push cancelado: hay errores de tipos o tests que fallan."
+  echo "   Corrígelos y vuelve a hacer push."
+  echo "   (Solo en una emergencia: git push --no-verify)"
+  exit 1
+fi
+
+echo "✅ Todo correcto, subiendo…"

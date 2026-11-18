@@ -18,8 +18,14 @@ Otros comandos:
 | Comando | Qué hace |
 |---|---|
 | `npm test` | Tests unitarios de la lógica de negocio (Vitest) |
-| `npm run lint` | Comprobación de tipos (TypeScript) |
+| `npm run typecheck` | Comprobación de tipos (TypeScript) |
+| `npm run check` | Tipos + tests (lo mismo que se ejecuta antes de cada push) |
 | `npm run build && npm start` | Build de producción |
+
+### Comprobación antes de cada push (husky)
+Cada `git push` ejecuta automáticamente `npm run check` (unos 15 s). Si hay errores de tipos o
+algún test falla, **el push se cancela** y se muestra qué ha fallado. El hook está en `.husky/pre-push`
+y se activa solo al hacer `npm install` (script `prepare`). En una emergencia: `git push --no-verify`.
 
 ### Modo demo (sin Supabase)
 Si no configuras Supabase y `NEXT_PUBLIC_ENABLE_DEMO=true`, la app arranca en **modo demo**: todo funciona, pero los
