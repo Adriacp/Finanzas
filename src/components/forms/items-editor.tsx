@@ -1,7 +1,7 @@
 "use client";
 import { Command } from "cmdk";
 import { Check, ChevronDown, Plus, Search, ShoppingBasket, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { normalize } from "@/core/insights";
 import { parseAmount, round2 } from "@/core/money";
@@ -23,23 +23,62 @@ const inputCls =
 /**
  * Desglose opcional de un movimiento por productos (p. ej. huevos, leche…).
  * Cantidad × precio = total; al editar el total se recalcula el precio unitario.
+ *
+ * Automático:
+ *  - Si ya has escrito el importe del movimiento, la última línea añadida se queda con lo que falta
+ *    (con un solo producto, su total es el importe entero). Al escribir su precio a mano deja de ser automática.
+ *  - Si no has escrito el importe, el importe sigue a la suma de las líneas.
  */
-export function ItemsEditor({ items, onChange, amount, onUseSum }: {
+export function ItemsEditor({ items, onChange, amount, amountManual, onSyncAmount, onUseSum }: {
   items: TransactionItem[];
   onChange: (items: TransactionItem[]) => void;
   /** Importe total del movimiento (para comparar con la suma de las líneas) */
   amount: number;
+  /** El importe lo ha escrito el usuario (si no, el importe sigue a la suma de las líneas) */
+  amountManual: boolean;
+  onSyncAmount: (sum: number) => void;
   onUseSum: (sum: number) => void;
 }) {
   const d = useData();
   const fmt = useMoney();
   const sum = itemsTotal(items);
   const diff = round2(amount - sum);
+  // Línea que se queda con «lo que falta» y líneas con precio puesto a mano
+  const [autoId, setAutoId] = useState<string | null>(null);
+  const [touched, setTouched] = useState<Set<string>>(() => new Set(items.map((i) => i.id)));
+
+  // Importe escrito: la línea automática toma el resto (importe − resto de líneas)
+  useEffect(() => {
+    if (!amountManual) return;
+    let target = autoId;
+    // Un único producto sin precio propio: su total es el importe completo
+    if (!target && items.length === 1 && !touched.has(items[0].id)) { setAutoId(items[0].id); target = items[0].id; }
+    if (!target) return;
+    const line = items.find((i) => i.id === target);
+    if (!line) return;
+    const rest = Math.max(0, round2(amount - itemsTotal(items.filter((i) => i.id !== target))));
+    if (Math.abs(line.amount - rest) < 0.005) return;
+    onChange(items.map((i) => (i.id === target ? { ...i, amount: rest, unitPrice: i.quantity > 0 ? Math.round((rest / i.quantity) * 1e4) / 1e4 : rest } : i)));
+  }, [amountManual, amount, autoId, items, touched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sin importe escrito: el importe del movimiento es la suma de las líneas
+  useEffect(() => {
+    if (!amountManual && items.length > 0 && sum > 0 && Math.abs(sum - amount) >= 0.005) onSyncAmount(sum);
+  }, [amountManual, sum]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (id: string, patch: Partial<TransactionItem>) => onChange(items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-  const remove = (id: string) => onChange(items.filter((it) => it.id !== id));
-  const add = () =>
-    onChange([...items, { id: newId(), transactionId: "", productId: null, name: "", quantity: 1, unitPrice: 0, amount: 0, sortOrder: items.length }]);
+  const remove = (id: string) => { if (id === autoId) setAutoId(null); onChange(items.filter((it) => it.id !== id)); };
+  const markManual = (id: string) => {
+    setTouched((t) => new Set(t).add(id));
+    if (id === autoId) setAutoId(null);
+  };
+  const add = () => {
+    const line: TransactionItem = { id: newId(), transactionId: "", productId: null, name: "", quantity: 1, unitPrice: 0, amount: 0, sortOrder: items.length };
+    // La anterior línea automática se queda con su valor; la nueva pasa a llevarse lo que falte
+    setAutoId(amountManual ? line.id : null);
+    if (autoId) setTouched((t) => new Set(t).add(autoId));
+    onChange([...items, line]);
+  };
 
   return (
     <div className="space-y-2">
@@ -49,7 +88,8 @@ export function ItemsEditor({ items, onChange, amount, onUseSum }: {
         </p>
       )}
       {items.map((it) => (
-        <ItemRow key={it.id} item={it} onChange={(p) => update(it.id, p)} onRemove={() => remove(it.id)} history={d} />
+        <ItemRow key={it.id} item={it} isAuto={amountManual && it.id === autoId} onManual={() => markManual(it.id)}
+          onChange={(p) => update(it.id, p)} onRemove={() => remove(it.id)} history={d} />
       ))}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="secondary" size="sm" onClick={add}><Plus /> Añadir producto</Button>
@@ -73,8 +113,11 @@ export function ItemsEditor({ items, onChange, amount, onUseSum }: {
   );
 }
 
-function ItemRow({ item, onChange, onRemove, history }: {
+function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
   item: TransactionItem;
+  /** Su total se calcula solo (lo que falta del importe) */
+  isAuto: boolean;
+  onManual: () => void;
   onChange: (patch: Partial<TransactionItem>) => void;
   onRemove: () => void;
   history: ReturnType<typeof useData>;
@@ -89,12 +132,15 @@ function ItemRow({ item, onChange, onRemove, history }: {
     const v = parseAmount(text);
     if (v === null) return;
     if (field === "q" && v > 0) onChange({ quantity: v, amount: lineTotal(v, item.unitPrice) });
+    if (field === "p" || field === "t") onManual();
     if (field === "p") onChange({ unitPrice: v, amount: lineTotal(item.quantity, v) });
     if (field === "t") onChange({ amount: round2(v), unitPrice: item.quantity > 0 ? Math.round((v / item.quantity) * 1e4) / 1e4 : v });
   }
 
   const pickProduct = (p: Product) => {
     const last = lastUnitPrice(p.id, history.transactionItems, history.transactions);
+    // En la línea automática manda el importe; en las demás se propone el último precio pagado
+    if (isAuto) return onChange({ productId: p.id, name: p.name });
     const unitPrice = item.unitPrice || last || 0;
     onChange({ productId: p.id, name: p.name, unitPrice, amount: lineTotal(item.quantity, unitPrice) });
   };
@@ -118,7 +164,9 @@ function ItemRow({ item, onChange, onRemove, history }: {
             onFocus={() => setEditing({ field: "p", text: item.unitPrice ? num(item.unitPrice, 3) : "" })} onChange={(e) => onType("p", e.target.value)} onBlur={() => setEditing(null)} />
         </label>
         <label className="min-w-0">
-          <span className="mb-0.5 block text-[10px] text-muted-foreground">Total</span>
+          <span className="mb-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
+            Total {isAuto && <span className="rounded bg-accent px-1 font-medium text-accent-foreground" title="Lo que falta del importe">auto</span>}
+          </span>
           <input inputMode="decimal" className={cn(inputCls, "font-semibold")} value={shown("t", item.amount)} placeholder="0,00"
             onFocus={() => setEditing({ field: "t", text: item.amount ? num(item.amount, 2) : "" })} onChange={(e) => onType("t", e.target.value)} onBlur={() => setEditing(null)} />
         </label>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatDate, relativeDayLabel, todayISO } from "@/core/dates";
 import { isPaidInFuture } from "@/core/finance";
-import { allTags, findDuplicates, merchantSuggestions, suggestCategory } from "@/core/insights";
+import { allTags, findDuplicates, normalize, suggestCategory, suggestFromMerchant } from "@/core/insights";
 import { parseAmount } from "@/core/money";
 import type { Transaction, TransactionItem, TxStatus, TxType } from "@/core/types";
 import { fieldErrors, transactionSchema } from "@/core/validation";
@@ -18,6 +18,8 @@ import { Modal } from "@/components/ui/modal";
 import { useMoney } from "@/components/ui/money";
 import { AccountSelect, CategorySelect, PaymentMethodSelect, SubcategorySelect, TagInput } from "./pickers";
 import { ItemsEditor } from "./items-editor";
+import { MerchantPicker } from "./merchant-picker";
+import { QuickCategoryDialog } from "./quick-category";
 import { cn } from "@/lib/utils";
 import { DatePicker, TimePicker } from "@/components/ui/date-time";
 
@@ -60,9 +62,12 @@ function TransactionForm() {
   const defaultAccount = data.accounts.find((a) => !a.archived)?.id ?? null;
   const [tx, setTx] = useState<Omit<Transaction, "id"> & { id?: string }>(() => ({ ...blank(defaultAccount), ...(initial ?? {}) }));
   const [amountText, setAmountText] = useState(initial?.amount ? String(initial.amount).replace(".", ",") : "");
+  // true cuando el importe lo ha calculado el desglose (suma de líneas) y no el usuario
+  const [amountAuto, setAmountAuto] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [futureAsk, setFutureAsk] = useState<{ again: boolean } | null>(null);
+  const [quickCat, setQuickCat] = useState<{ parentId: string | null } | null>(null);
   const [file, setFile] = useState<File | null>(null);
   // Desglose por productos (opcional): al editar se carga el existente; al duplicar se copia
   const [items, setItems] = useState<TransactionItem[]>(() => {
@@ -74,11 +79,18 @@ function TransactionForm() {
   const [showItems, setShowItems] = useState(() => items.length > 0);
   const [showMore, setShowMore] = useState(mode === "edit" && !!(initial?.merchant || initial?.notes || initial?.tags?.length || initial?.description || initial?.attachmentPath));
   const categoryTouched = useRef(mode === "edit" || !!initial?.categoryId);
+  const accountTouched = useRef(mode === "edit" || !!initial?.accountId);
+  /** Último movimiento en ese comercio (para proponer su cuenta y forma de pago habituales) */
+  const lastAtMerchant = (name: string) => {
+    const key = normalize(name);
+    return data.transactions
+      .filter((t) => t.merchant && normalize(t.merchant) === key && t.type !== "transfer")
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  };
   const amountRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof Transaction>(k: K, v: Transaction[K]) => setTx((p) => ({ ...p, [k]: v }));
   const kind = tx.type === "income" ? "income" : "expense";
-  const merchants = useMemo(() => merchantSuggestions(data.transactions), [data.transactions]);
   const tags = useMemo(() => allTags(data.transactions), [data.transactions]);
 
   useEffect(() => {
@@ -93,9 +105,14 @@ function TransactionForm() {
     if (c && c.kind !== kind) setTx((p) => ({ ...p, categoryId: null, subcategoryId: null }));
   }, [tx.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sugerencia automática de categoría según concepto/comercio
+  // Sugerencia automática de categoría: primero la habitual del comercio (p. ej. «Spar» → Supermercado),
+  // después por el texto del concepto/comercio y por palabras clave
   const suggestion = useMemo(() => {
     if (tx.type === "transfer") return null;
+    if (kind === "expense") {
+      const fromMerchant = suggestFromMerchant(tx.merchant, data.transactions);
+      if (fromMerchant) return fromMerchant;
+    }
     const text = `${tx.concept} ${tx.merchant ?? ""}`.trim();
     return suggestCategory(text, data.transactions, data.categories, kind);
   }, [tx.concept, tx.merchant, tx.type, kind, data.transactions, data.categories]);
@@ -154,6 +171,7 @@ function TransactionForm() {
       if (again) {
         setTx({ ...blank(row.accountId), date: row.date, type: row.type });
         setAmountText("");
+        setAmountAuto(false);
         setItems([]);
         setFile(null);
         categoryTouched.current = false;
@@ -195,12 +213,29 @@ function TransactionForm() {
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-4" noValidate>
       <Segmented value={tx.type} onChange={(v) => set("type", v)} options={TYPE_OPTIONS} className="w-full" size="sm" />
 
+      {/* El comercio va primero: al elegirlo se rellenan solos el concepto, la categoría habitual,
+          la cuenta y la forma de pago que sueles usar allí */}
+      {tx.type !== "transfer" && (
+        <Field label="Comercio">
+          <MerchantPicker value={tx.merchant} onChange={(name) => {
+            const last = name ? lastAtMerchant(name) : undefined;
+            setTx((p) => ({
+              ...p,
+              merchant: name,
+              concept: p.concept.trim() ? p.concept : name ? `Compra ${name}` : p.concept,
+              accountId: last?.accountId && !accountTouched.current ? last.accountId : p.accountId,
+              paymentMethod: p.paymentMethod ?? last?.paymentMethod ?? null,
+            }));
+          }} />
+        </Field>
+      )}
+
       <div className="rounded-2xl bg-muted/60 px-4 py-4 text-center">
         <label htmlFor="tx-amount" className="text-xs text-muted-foreground">Importe</label>
         <div className={cn("flex items-center justify-center gap-1 text-4xl font-semibold tracking-tight tabular", typeColor)}>
           <span>{tx.type === "expense" ? "−" : tx.type === "transfer" ? "" : "+"}</span>
           <input id="tx-amount" ref={amountRef} inputMode="decimal" autoComplete="off" placeholder="0,00" value={amountText}
-            onChange={(e) => setAmountText(e.target.value.replace(/[^\d.,-]/g, ""))} aria-invalid={!!errors.amount}
+            onChange={(e) => { setAmountAuto(false); setAmountText(e.target.value.replace(/[^\d.,-]/g, "")); }} aria-invalid={!!errors.amount}
             className="w-44 bg-transparent text-center outline-none placeholder:text-muted-foreground/40" style={{ fontSize: "inherit" }} />
           <span className="text-2xl text-muted-foreground">€</span>
         </div>
@@ -225,14 +260,16 @@ function TransactionForm() {
         <>
           <div className="grid grid-cols-2 gap-3">
             <Field label={<span className="inline-flex items-center gap-1">Categoría {suggestion && !categoryTouched.current && tx.categoryId === suggestion.categoryId && <Sparkles className="size-3 text-primary" aria-label="Sugerida" />}</span>}>
-              <CategorySelect categories={data.categories} kind={kind} value={tx.categoryId} onChange={(v) => { categoryTouched.current = true; setTx((p) => ({ ...p, categoryId: v, subcategoryId: null })); }} />
+              <CategorySelect categories={data.categories} kind={kind} value={tx.categoryId} onCreate={() => setQuickCat({ parentId: null })}
+                onChange={(v) => { categoryTouched.current = true; setTx((p) => ({ ...p, categoryId: v, subcategoryId: null })); }} />
             </Field>
             <Field label="Subcategoría">
-              <SubcategorySelect categories={data.categories} parentId={tx.categoryId} value={tx.subcategoryId} onChange={(v) => { categoryTouched.current = true; set("subcategoryId", v); }} />
+              <SubcategorySelect categories={data.categories} parentId={tx.categoryId} value={tx.subcategoryId} onCreate={() => setQuickCat({ parentId: tx.categoryId })}
+                onChange={(v) => { categoryTouched.current = true; set("subcategoryId", v); }} />
             </Field>
           </div>
           <Field label="Cuenta o tarjeta">
-            <AccountSelect accounts={data.accounts} value={tx.accountId} onChange={(v) => set("accountId", v)} />
+            <AccountSelect accounts={data.accounts} value={tx.accountId} onChange={(v) => { accountTouched.current = true; set("accountId", v); }} />
           </Field>
         </>
       )}
@@ -273,7 +310,9 @@ function TransactionForm() {
             <div className="border-t border-border p-2.5">
               {schemaOutdated
                 ? <p className="text-xs text-muted-foreground">Para guardar el desglose falta actualizar la base de datos (migración 0002).</p>
-                : <ItemsEditor items={items} onChange={setItems} amount={Math.abs(amount)} onUseSum={(sum) => setAmountText(String(sum).replace(".", ","))} />}
+                : <ItemsEditor items={items} onChange={setItems} amount={Math.abs(amount)} amountManual={Math.abs(amount) > 0 && !amountAuto}
+                    onSyncAmount={(sum) => { setAmountAuto(true); setAmountText(String(sum).replace(".", ",")); }}
+                    onUseSum={(sum) => { setAmountAuto(false); setAmountText(String(sum).replace(".", ",")); }} />}
             </div>
           )}
         </div>
@@ -285,15 +324,9 @@ function TransactionForm() {
 
       {showMore && (
         <div className="space-y-4 animate-in">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Comercio">
-              <Input list="merchants" value={tx.merchant ?? ""} onChange={(e) => set("merchant", e.target.value || null)} placeholder="Establecimiento" maxLength={80} />
-              <datalist id="merchants">{merchants.map((m) => <option key={m} value={m} />)}</datalist>
-            </Field>
-            <Field label="Método de pago">
-              <PaymentMethodSelect value={tx.paymentMethod} onChange={(v) => set("paymentMethod", v)} />
-            </Field>
-          </div>
+          <Field label="Método de pago">
+            <PaymentMethodSelect value={tx.paymentMethod} onChange={(v) => set("paymentMethod", v)} />
+          </Field>
           <Field label="Etiquetas"><TagInput value={tx.tags} onChange={(v) => set("tags", v)} suggestions={tags} /></Field>
           <Field label="Descripción"><Input value={tx.description ?? ""} onChange={(e) => set("description", e.target.value || null)} maxLength={500} /></Field>
           <Field label="Notas personales"><Textarea value={tx.notes ?? ""} onChange={(e) => set("notes", e.target.value || null)} rows={2} maxLength={2000} /></Field>
@@ -305,7 +338,7 @@ function TransactionForm() {
             <div className="flex flex-wrap items-center gap-2">
               <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-input px-3 text-sm hover:bg-muted">
                 <Paperclip className="size-4" /> {file ? file.name : tx.attachmentPath ? "Reemplazar archivo" : "Adjuntar o hacer foto"}
-                <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               </label>
               {file && <Button variant="ghost" size="icon-sm" onClick={() => setFile(null)} aria-label="Quitar archivo"><X /></Button>}
               {tx.attachmentPath && !file && (
@@ -351,6 +384,12 @@ function TransactionForm() {
           </p>
         </div>
       </Modal>
+
+      <QuickCategoryDialog open={!!quickCat} onOpenChange={(o) => !o && setQuickCat(null)} parentId={quickCat?.parentId ?? null} kind={kind}
+        onCreated={(c) => {
+          categoryTouched.current = true;
+          setTx((p) => (c.parentId ? { ...p, categoryId: c.parentId, subcategoryId: c.id } : { ...p, categoryId: c.id, subcategoryId: null }));
+        }} />
     </form>
   );
 }

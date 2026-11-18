@@ -1,7 +1,7 @@
 "use client";
 import {
   ArrowLeftRight, CalendarDays, ChartPie, Ellipsis, Eye, EyeOff, FileText, Goal, LayoutDashboard, Plus, Repeat, Search, Settings,
-  Tags, Wallet, PiggyBank, ShoppingBasket, LoaderCircle, TriangleAlert, Database,
+  Tags, Wallet, PiggyBank, ShoppingBasket, Store, LoaderCircle, TriangleAlert, Database,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,6 +23,7 @@ export const NAV = [
   { href: "/transactions", label: "Movimientos", icon: ArrowLeftRight },
   { href: "/analytics", label: "Análisis", icon: ChartPie },
   { href: "/products", label: "Productos", icon: ShoppingBasket },
+  { href: "/merchants", label: "Comercios", icon: Store },
   { href: "/budgets", label: "Presupuestos", icon: PiggyBank },
   { href: "/accounts", label: "Cuentas", icon: Wallet },
   { href: "/recurring", label: "Recurrentes", icon: Repeat },

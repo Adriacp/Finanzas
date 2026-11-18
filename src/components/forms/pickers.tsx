@@ -11,12 +11,17 @@ export function sortCats(list: Category[]) {
   return [...list].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
 }
 
-export function CategorySelect({ categories, kind, value, onChange, placeholder = "Sin categoría", id, includeAll }: {
+/** Valor especial del desplegable para «crear nueva» */
+const NEW = "__new__";
+
+export function CategorySelect({ categories, kind, value, onChange, placeholder = "Sin categoría", id, includeAll, onCreate }: {
   categories: Category[]; kind?: CategoryKind; value: string | null; onChange: (v: string | null) => void; placeholder?: string; id?: string; includeAll?: boolean;
+  /** Si se indica, muestra «+ Nueva categoría…» al final */
+  onCreate?: () => void;
 }) {
   const parents = sortCats(categories.filter((c) => !c.parentId && (!kind || c.kind === kind)));
   return (
-    <Select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
+    <Select id={id} value={value ?? ""} onChange={(e) => (e.target.value === NEW ? onCreate?.() : onChange(e.target.value || null))}>
       <option value="">{placeholder}</option>
       {includeAll
         ? parents.map((p) => (
@@ -26,18 +31,23 @@ export function CategorySelect({ categories, kind, value, onChange, placeholder 
             </optgroup>
           ))
         : parents.map((p) => <option key={p.id} value={p.id} data-icon={p.icon} data-color={p.color} data-description={p.description ?? undefined}>{p.name}</option>)}
+      {onCreate && <option value={NEW} data-icon="plus" data-color="#6366f1" data-description="Crea una categoría propia">Nueva categoría…</option>}
     </Select>
   );
 }
 
-export function SubcategorySelect({ categories, parentId, value, onChange, id }: {
+export function SubcategorySelect({ categories, parentId, value, onChange, id, onCreate }: {
   categories: Category[]; parentId: string | null; value: string | null; onChange: (v: string | null) => void; id?: string;
+  /** Si se indica, muestra «+ Nueva subcategoría…» al final */
+  onCreate?: () => void;
 }) {
   const subs = sortCats(categories.filter((c) => c.parentId && c.parentId === parentId));
   return (
-    <Select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} disabled={!parentId || subs.length === 0}>
+    <Select id={id} value={value ?? ""} onChange={(e) => (e.target.value === NEW ? onCreate?.() : onChange(e.target.value || null))}
+      disabled={!parentId || (subs.length === 0 && !onCreate)}>
       <option value="">{parentId ? "Sin subcategoría" : "Elige categoría"}</option>
       {subs.map((s) => <option key={s.id} value={s.id} data-icon={s.icon} data-color={s.color}>{s.name}</option>)}
+      {onCreate && parentId && <option value={NEW} data-icon="plus" data-color="#6366f1">Nueva subcategoría…</option>}
     </Select>
   );
 }

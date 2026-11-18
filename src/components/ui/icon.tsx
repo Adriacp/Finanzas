@@ -1,5 +1,5 @@
 import {
-  ArrowLeftRight, Baby, Banknote, Beer, BookOpen, Briefcase, Bus, Car, ChartLine, CircleEllipsis, Coffee, CreditCard, Droplet, Dumbbell, Film, Fuel,
+  ArrowLeftRight, Baby, Plus, Banknote, Beer, BookOpen, Briefcase, Bus, Car, ChartLine, CircleEllipsis, Coffee, CreditCard, Droplet, Dumbbell, Film, Fuel,
   Gamepad2, Gift, GraduationCap, Hammer, HeartPulse, House, Landmark, Laptop, Music, PartyPopper, PawPrint, PiggyBank, Pill, Plane,
   Receipt, Repeat, Shirt, ShoppingBag, ShoppingBasket, Smartphone, Sparkles, Tag, Target, Ticket, TreePalm, TrendingUp, Umbrella,
   Utensils, Wallet, Wifi, Wrench, Zap, type LucideIcon,
@@ -8,7 +8,7 @@ import { cn, tint } from "@/lib/utils";
 
 /** Registro de iconos por nombre (los nombres se guardan en BD y son compatibles con lucide-react-native). */
 export const ICONS: Record<string, LucideIcon> = {
-  "arrow-left-right": ArrowLeftRight, baby: Baby, banknote: Banknote, beer: Beer, "book-open": BookOpen, briefcase: Briefcase, bus: Bus, car: Car, "chart-line": ChartLine,
+  "arrow-left-right": ArrowLeftRight, plus: Plus, baby: Baby, banknote: Banknote, beer: Beer, "book-open": BookOpen, briefcase: Briefcase, bus: Bus, car: Car, "chart-line": ChartLine,
   "circle-ellipsis": CircleEllipsis, coffee: Coffee, "credit-card": CreditCard, droplet: Droplet, dumbbell: Dumbbell, film: Film, fuel: Fuel,
   "gamepad-2": Gamepad2, gift: Gift, "graduation-cap": GraduationCap, hammer: Hammer, "heart-pulse": HeartPulse, house: House, landmark: Landmark,
   laptop: Laptop, music: Music, "party-popper": PartyPopper, "paw-print": PawPrint, "piggy-bank": PiggyBank, pill: Pill, plane: Plane,

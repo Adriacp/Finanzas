@@ -155,11 +155,61 @@ export function suggestCategory(
   return null;
 }
 
+/** Comercio conocido, obtenido del historial (no hace falta guardarlo aparte). */
+export interface MerchantEntry {
+  /** Forma más usada del nombre (p. ej. «Spar» aunque a veces se escribiera «spar »). */
+  name: string;
+  key: string;
+  count: number;
+  lastDate: string;
+  /** Categoría y subcategoría que más usas con este comercio (para gastos), si hay */
+  categoryId: ID | null;
+  subcategoryId: ID | null;
+}
+
+/**
+ * Directorio de comercios a partir de los movimientos: agrupa variantes del mismo nombre
+ * (mayúsculas, tildes, espacios) y calcula su categoría habitual. Ordenado por uso.
+ */
+export function merchantDirectory(txs: Transaction[]): MerchantEntry[] {
+  const groups = new Map<string, { spellings: Map<string, number>; count: number; lastDate: string; cats: Map<string, { c: number; cat: ID; sub: ID | null }> }>();
+  for (const t of txs) {
+    const raw = t.merchant?.trim();
+    if (!raw) continue;
+    const key = normalize(raw);
+    if (!key) continue;
+    const g = groups.get(key) ?? { spellings: new Map(), count: 0, lastDate: t.date, cats: new Map() };
+    g.spellings.set(raw, (g.spellings.get(raw) ?? 0) + 1);
+    g.count++;
+    if (t.date > g.lastDate) g.lastDate = t.date;
+    if (t.categoryId && (t.type === "expense" || t.type === "refund")) {
+      const ck = `${t.categoryId}|${t.subcategoryId ?? ""}`;
+      const cur = g.cats.get(ck) ?? { c: 0, cat: t.categoryId, sub: t.subcategoryId };
+      cur.c++;
+      g.cats.set(ck, cur);
+    }
+    groups.set(key, g);
+  }
+  return [...groups.entries()]
+    .map(([key, g]) => {
+      const name = [...g.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const best = [...g.cats.values()].sort((a, b) => b.c - a.c)[0];
+      return { name, key, count: g.count, lastDate: g.lastDate, categoryId: best?.cat ?? null, subcategoryId: best?.sub ?? null };
+    })
+    .sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : -1));
+}
+
+/** Categoría habitual de un comercio (si lo has usado antes en un gasto). */
+export function suggestFromMerchant(merchant: string | null | undefined, txs: Transaction[]): CategorySuggestion | null {
+  const key = normalize(merchant ?? "");
+  if (!key) return null;
+  const m = merchantDirectory(txs).find((x) => x.key === key);
+  return m?.categoryId ? { categoryId: m.categoryId, subcategoryId: m.subcategoryId, source: "history" } : null;
+}
+
 /** Comercios usados ordenados por frecuencia (para autocompletar). */
 export function merchantSuggestions(txs: Transaction[], limit = 200): string[] {
-  const freq = new Map<string, number>();
-  for (const t of txs) if (t.merchant) freq.set(t.merchant, (freq.get(t.merchant) ?? 0) + 1);
-  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([m]) => m);
+  return merchantDirectory(txs).slice(0, limit).map((m) => m.name);
 }
 
 export function allTags(txs: Transaction[]): string[] {

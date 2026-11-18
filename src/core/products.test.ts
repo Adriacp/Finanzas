@@ -69,3 +69,21 @@ describe("productos", () => {
     expect(filterTransactions([a, b], { q: "huevos" }, [], [], map).map((t) => t.id)).toEqual([a.id]);
   });
 });
+
+describe("comercios", () => {
+  it("agrupa variantes del nombre y aprende la categoría habitual", async () => {
+    const { merchantDirectory, suggestFromMerchant } = await import("./insights");
+    const txs = [
+      tx({ merchant: "Spar", categoryId: "alim", subcategoryId: "super", date: "2026-11-01" }),
+      tx({ merchant: "Spar ", categoryId: "alim", subcategoryId: "super", date: "2026-11-05" }),
+      tx({ merchant: "spar", categoryId: "alim", subcategoryId: "super", date: "2026-11-07" }),
+      tx({ merchant: "SPAR", categoryId: "ocio", subcategoryId: "bares", date: "2026-11-09" }),
+      tx({ merchant: "Mercadona", categoryId: "alim", subcategoryId: "super", date: "2026-11-10" }),
+    ];
+    const dir = merchantDirectory(txs);
+    expect(dir).toHaveLength(2);
+    expect(dir[0]).toMatchObject({ name: "Spar", count: 4, categoryId: "alim", subcategoryId: "super", lastDate: "2026-11-09" });
+    expect(suggestFromMerchant(" spar", txs)).toMatchObject({ categoryId: "alim", subcategoryId: "super" });
+    expect(suggestFromMerchant("Desconocido", txs)).toBeNull();
+  });
+});
