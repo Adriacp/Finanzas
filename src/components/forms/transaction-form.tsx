@@ -2,7 +2,8 @@
 import { ChevronDown, Copy, Paperclip, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { formatDate, todayISO } from "@/core/dates";
+import { formatDate, relativeDayLabel, todayISO } from "@/core/dates";
+import { isPaidInFuture } from "@/core/finance";
 import { allTags, findDuplicates, merchantSuggestions, suggestCategory } from "@/core/insights";
 import { parseAmount } from "@/core/money";
 import type { Transaction, TxStatus, TxType } from "@/core/types";
@@ -60,6 +61,7 @@ function TransactionForm() {
   const [amountText, setAmountText] = useState(initial?.amount ? String(initial.amount).replace(".", ",") : "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [futureAsk, setFutureAsk] = useState<{ again: boolean } | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [showMore, setShowMore] = useState(mode === "edit" && !!(initial?.merchant || initial?.notes || initial?.tags?.length || initial?.description || initial?.attachmentPath));
   const categoryTouched = useRef(mode === "edit" || !!initial?.categoryId);
@@ -99,8 +101,8 @@ function TransactionForm() {
     [amount, tx, data.transactions],
   );
 
-  async function submit(again = false) {
-    const candidate = { ...tx, amount: Math.abs(amount), concept: tx.concept.trim(), merchant: tx.merchant?.trim() || null };
+  async function submit(again = false, opts: { status?: TxStatus; confirmedFuture?: boolean } = {}) {
+    const candidate = { ...tx, ...(opts.status ? { status: opts.status } : {}), amount: Math.abs(amount), concept: tx.concept.trim(), merchant: tx.merchant?.trim() || null };
     const parsed = transactionSchema.safeParse(candidate);
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
@@ -108,6 +110,13 @@ function TransactionForm() {
       return;
     }
     setErrors({});
+    // «Pagado» con fecha futura: casi siempre debería estar programado. Preguntar antes de guardar.
+    if (!opts.confirmedFuture && isPaidInFuture(candidate, todayISO())) {
+      setFutureAsk({ again });
+      return;
+    }
+    setFutureAsk(null);
+    if (opts.status) set("status", opts.status);
     setSaving(true);
     try {
       let attachmentPath = candidate.attachmentPath;
@@ -280,6 +289,24 @@ function TransactionForm() {
           <Button type="submit" disabled={saving} className="min-w-28">{saving ? "Guardando…" : "Guardar"}</Button>
         </div>
       </div>
+
+      <Modal open={!!futureAsk} onOpenChange={(o) => !o && setFutureAsk(null)} title="¿Pagado en una fecha futura?" size="sm"
+        footer={<>
+          <Button variant="ghost" onClick={() => setFutureAsk(null)}>Volver</Button>
+          <Button variant="secondary" disabled={saving} onClick={() => submit(futureAsk?.again, { confirmedFuture: true })}>Guardar como pagado</Button>
+          <Button disabled={saving} onClick={() => submit(futureAsk?.again, { status: "scheduled", confirmedFuture: true })}>Programarlo</Button>
+        </>}>
+        <div className="space-y-3 text-sm">
+          <p>
+            Has marcado como <b>pagado</b> «{tx.concept.trim() || "este movimiento"}» por <b className="tabular">{fmt(Math.abs(amount))}</b> con
+            fecha <b>{relativeDayLabel(tx.date).toLowerCase()}</b>{tx.date ? ` (${formatDate(tx.date)})` : ""}.
+          </p>
+          <p className="text-muted-foreground">
+            Un movimiento pagado cuenta ya en tus saldos y gastos. Si el dinero todavía no ha salido, márcalo como <b className="text-foreground">programado</b>:
+            aparecerá en el calendario y en «Próximos pagos» hasta ese día.
+          </p>
+        </div>
+      </Modal>
     </form>
   );
 }

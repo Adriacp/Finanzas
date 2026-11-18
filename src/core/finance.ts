@@ -1,10 +1,16 @@
 import { endOfMonth } from "date-fns";
 import { type DateRange, fromISO, inRange, monthKey, toISO, daysInRange } from "./dates";
 import { round2 } from "./money";
-import type { Account, AccountType, Category, ID, Transaction } from "./types";
+import type { Account, AccountType, Category, ID, ISODate, Transaction } from "./types";
 
 /** Solo los movimientos pagados afectan a saldos y totales reales. */
 export const isEffective = (t: Transaction) => t.status === "paid";
+
+/**
+ * Movimiento marcado como pagado pero con fecha posterior a hoy. Suele ser un error:
+ * cuenta ya en saldos y gastos aunque el dinero aún no ha salido (debería estar programado).
+ */
+export const isPaidInFuture = (t: Pick<Transaction, "status" | "date">, today: ISODate) => t.status === "paid" && t.date > today;
 
 /**
  * Efecto neto de un movimiento sobre los gastos:

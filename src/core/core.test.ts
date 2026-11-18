@@ -4,7 +4,7 @@ import { detectMapping, mapRows, parseBankDate, toCSV } from "./csv";
 import { periodRange, previousRange } from "./dates";
 import { buildDefaultCategories } from "./defaults";
 import { filterTransactions } from "./filters";
-import { accountBalances, expenseByCategory, netWorthSeries, summarize, wealth } from "./finance";
+import { accountBalances, expenseByCategory, isPaidInFuture, netWorthSeries, summarize, wealth } from "./finance";
 import { goalProgress } from "./goals";
 import { findDuplicates, suggestCategory, unusualExpenses } from "./insights";
 import { parseAmount } from "./money";
@@ -80,6 +80,12 @@ describe("finance", () => {
   it("net worth series is unaffected by internal transfers", () => {
     const s = netWorthSeries(accounts, txs, ["2026-10", "2026-11"]);
     expect(s).toEqual([{ month: "2026-10", value: 1500 }, { month: "2026-11", value: 3250 }]);
+  });
+  it("detects paid movements dated in the future", () => {
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-19" }, "2026-11-18")).toBe(true);
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-18" }, "2026-11-18")).toBe(false);
+    expect(isPaidInFuture({ status: "scheduled", date: "2026-11-19" }, "2026-11-18")).toBe(false);
+    expect(isPaidInFuture({ status: "pending", date: "2026-12-01" }, "2026-11-18")).toBe(false);
   });
   it("groups expenses by category", () => {
     const cats = buildDefaultCategories(newId);

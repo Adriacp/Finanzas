@@ -172,29 +172,46 @@ function Calendar({ value, onSelect, min, max }: { value: string | null; onSelec
 const m = (d: Date) => d.getMonth();
 
 // ===========================================================================
-// Hora: dos columnas que se desplazan y encajan en la franja central (estilo iPhone),
-// como lista plana y finita: sin efecto de cilindro ni bucle infinito, solo scroll nativo.
+// Hora: dos columnas circulares que se desplazan y encajan en la franja central (estilo iPhone).
+// Truco para el bucle sin coste: la lista se repite muchas veces y se empieza en la copia central;
+// cuando el desplazamiento se detiene lejos del centro, se salta en silencio al mismo número de la
+// copia central (las copias son idénticas, así que no se nota). Sin cilindro 3D ni cálculos por
+// fotograma: solo filas planas y scroll nativo.
 // ===========================================================================
 const ITEM_H = 40;
 const VISIBLE = 5;
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const HOURS = Array.from({ length: 24 }, (_, i) => pad2(i));
 const MINUTES = Array.from({ length: 60 }, (_, i) => pad2(i));
+/** ~600 filas por columna: margen de sobra para cualquier gesto antes de recentrar. Impar para tener copia central. */
+const copiesFor = (n: number) => Math.ceil(600 / n) | 1;
 
 function WheelColumn({ items, index, onChange, label, openToken }: { items: string[]; index: number; onChange: (i: number) => void; label: string; openToken: number }) {
+  const n = items.length;
+  const copies = copiesFor(n);
+  const total = n * copies;
+  const mid = Math.floor(copies / 2) * n;
+  const rowOf = (v: number) => mid + v;
+  const valueOf = (row: number) => ((row % n) + n) % n;
+  const clampRow = (r: number) => Math.max(0, Math.min(total - 1, r));
+
   const ref = useRef<HTMLDivElement>(null);
-  const [live, setLive] = useState(index);
+  const [liveRow, setLiveRow] = useState(rowOf(index));
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frame = useRef(0);
   const selfScroll = useRef(false);
 
-  // Posicionar sin animación si el valor cambia desde fuera (p. ej. «Ahora»)
-  useLayoutEffect(() => {
+  const placeAt = (row: number) => {
     const el = ref.current;
     if (!el) return;
+    el.scrollTop = row * ITEM_H;
+    setLiveRow(row);
+  };
+
+  // Posicionar sin animación si el valor cambia desde fuera (p. ej. «Ahora»)
+  useLayoutEffect(() => {
     if (selfScroll.current) { selfScroll.current = false; return; }
-    el.scrollTop = index * ITEM_H;
-    setLive(index);
+    placeAt(rowOf(index));
   }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cada vez que se abre el selector: centrar en el valor actual (también en el siguiente
@@ -202,14 +219,12 @@ function WheelColumn({ items, index, onChange, label, openToken }: { items: stri
   const indexRef = useRef(index);
   indexRef.current = index;
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
     selfScroll.current = false;
-    const place = () => { el.scrollTop = indexRef.current * ITEM_H; setLive(indexRef.current); };
+    const place = () => placeAt(rowOf(indexRef.current));
     place();
     const raf = requestAnimationFrame(place);
     return () => cancelAnimationFrame(raf);
-  }, [openToken]);
+  }, [openToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { if (settle.current) clearTimeout(settle.current); cancelAnimationFrame(frame.current); }, []);
 
@@ -218,34 +233,38 @@ function WheelColumn({ items, index, onChange, label, openToken }: { items: stri
     if (!el) return;
     // Resaltar en vivo (como mucho una vez por fotograma)
     cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => setLive(Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / ITEM_H)))));
-    // Confirmar el valor cuando el desplazamiento se detiene
+    frame.current = requestAnimationFrame(() => setLiveRow(clampRow(Math.round(el.scrollTop / ITEM_H))));
+    // Cuando el desplazamiento se detiene: confirmar el valor y volver a la copia central
     if (settle.current) clearTimeout(settle.current);
     settle.current = setTimeout(() => {
-      const i = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / ITEM_H)));
-      if (i !== index) { selfScroll.current = true; onChange(i); }
+      const row = clampRow(Math.round(el.scrollTop / ITEM_H));
+      const v = valueOf(row);
+      if (Math.abs(row - rowOf(v)) >= n) placeAt(rowOf(v)); // salto invisible: mismo número, copia central
+      if (v !== index) { selfScroll.current = true; onChange(v); }
     }, 120);
   }
 
-  /** Al tocar una opción o usar el teclado: el valor se guarda al instante y el scroll se anima después. */
-  const go = (i: number) => {
-    const c = Math.max(0, Math.min(items.length - 1, i));
-    setLive(c);
-    if (c !== index) { selfScroll.current = true; onChange(c); }
-    ref.current?.scrollTo({ top: c * ITEM_H, behavior: "smooth" });
+  /** Al tocar una fila o usar el teclado: el valor se guarda al instante y el scroll se anima después. */
+  const go = (row: number) => {
+    const r = clampRow(row);
+    const v = valueOf(r);
+    setLiveRow(r);
+    if (v !== index) { selfScroll.current = true; onChange(v); }
+    ref.current?.scrollTo({ top: r * ITEM_H, behavior: "smooth" });
   };
 
   function onKeyDown(e: KeyboardEvent) {
     const d = { ArrowUp: -1, ArrowDown: 1, PageUp: -5, PageDown: 5 }[e.key];
-    if (d) { e.preventDefault(); go(live + d); }
-    if (e.key === "Home") { e.preventDefault(); go(0); }
-    if (e.key === "End") { e.preventDefault(); go(items.length - 1); }
+    if (d) { e.preventDefault(); go(liveRow + d); }
+    const copyStart = liveRow - valueOf(liveRow);
+    if (e.key === "Home") { e.preventDefault(); go(copyStart); }
+    if (e.key === "End") { e.preventDefault(); go(copyStart + n - 1); }
   }
 
   return (
     <div className="relative flex-1">
       <div className="pointer-events-none absolute inset-x-1 rounded-xl bg-muted" style={{ top: ITEM_H * ((VISIBLE - 1) / 2), height: ITEM_H }} />
-      <div ref={ref} onScroll={onScroll} onKeyDown={onKeyDown} tabIndex={0} role="listbox" aria-label={label} aria-activedescendant={`${label}-${live}`}
+      <div ref={ref} onScroll={onScroll} onKeyDown={onKeyDown} tabIndex={0} role="listbox" aria-label={label} aria-activedescendant={`${label}-${liveRow}`}
         className="relative snap-y snap-mandatory overflow-y-auto overscroll-contain scrollbar-none rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         style={{
           height: ITEM_H * VISIBLE,
@@ -253,12 +272,12 @@ function WheelColumn({ items, index, onChange, label, openToken }: { items: stri
           maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
           WebkitMaskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
         }}>
-        {items.map((it, i) => (
-          <button key={it} id={`${label}-${i}`} type="button" role="option" aria-selected={i === live} tabIndex={-1} onClick={() => go(i)}
+        {Array.from({ length: total }, (_, row) => (
+          <button key={row} id={`${label}-${row}`} type="button" role="option" aria-selected={row === liveRow} tabIndex={-1} onClick={() => go(row)}
             className={cn("block w-full snap-center text-center text-xl tabular transition-colors cursor-pointer",
-              i === live ? "font-semibold text-foreground" : "text-muted-foreground")}
+              row === liveRow ? "font-semibold text-foreground" : "text-muted-foreground")}
             style={{ height: ITEM_H }}>
-            {it}
+            {items[row % n]}
           </button>
         ))}
       </div>
