@@ -118,11 +118,15 @@ function TransactionsInner() {
       </div>
 
       {selection.size > 0 && (
-        <div className="sticky top-16 z-20 mb-3 flex items-center gap-2 rounded-2xl border border-border bg-card p-2 pl-4 shadow-lg animate-pop lg:top-4">
-          <span className="text-sm font-medium">{selection.size} seleccionados</span>
-          <Button variant="ghost" size="sm" onClick={() => setSelection(new Set(results.slice(0, limit).map((t) => t.id)))}>Seleccionar visibles</Button>
-          <div className="ml-auto flex gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setSelection(new Set())}>Cancelar</Button>
+        <div className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-border bg-card p-2 pl-3 shadow-lg animate-pop lg:top-4">
+          <span className="text-sm font-medium tabular whitespace-nowrap">{selection.size} <span className="hidden sm:inline">seleccionados</span><span className="sm:hidden">selec.</span></span>
+          <Button variant="ghost" size="sm" onClick={() => setSelection(new Set(results.slice(0, limit).map((t) => t.id)))}>
+            <span className="sm:hidden">Todos</span><span className="hidden sm:inline">Seleccionar visibles</span>
+          </Button>
+          <div className="ml-auto flex shrink-0 gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setSelection(new Set())} aria-label="Cancelar selección">
+              <X className="sm:hidden" /><span className="hidden sm:inline">Cancelar</span>
+            </Button>
             <Button variant="danger" size="sm" onClick={bulkDelete}><Trash2 /> Eliminar</Button>
           </div>
         </div>

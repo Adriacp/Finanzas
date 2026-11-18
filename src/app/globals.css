@@ -100,7 +100,11 @@
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    /* Nunca permitir desplazamiento horizontal de la página en el móvil.
+       "clip" (y no "hidden") para no romper los elementos sticky. */
+    overflow-x: clip;
   }
+  html { overflow-x: clip; }
   ::selection { background: color-mix(in oklch, var(--primary) 25%, transparent); }
   input, select, textarea { font-size: 16px; } /* evita zoom en iOS */
   @media (min-width: 768px) { input, select, textarea { font-size: 14px; } }
