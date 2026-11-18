@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FinanceData, Profile } from "@/core/types";
-import { ENTITY_ORDER, newId, type EntityKey, type EntityMap, type FinanceRepository } from "./repository";
+import { ENTITY_ORDER, newId, OPTIONAL_ENTITIES, type EntityKey, type EntityMap, type FinanceRepository } from "./repository";
 
 const TABLE: Record<EntityKey, string> = {
   accounts: "accounts",
@@ -10,9 +10,11 @@ const TABLE: Record<EntityKey, string> = {
   recurring: "recurring",
   goals: "goals",
   savedViews: "saved_views",
+  products: "products",
+  transactionItems: "transaction_items",
 };
 
-const NUMERIC = new Set(["amount", "initialBalance", "targetAmount", "savedAmount", "monthlyBudget"]);
+const NUMERIC = new Set(["amount", "initialBalance", "targetAmount", "savedAmount", "monthlyBudget", "quantity", "unitPrice"]);
 const LOCAL_ONLY = new Set(["createdAt"]);
 
 const snake = (k: string) => k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
@@ -42,7 +44,11 @@ function check<T>(res: { data: T; error: { message: string } | null }): T {
   return res.data;
 }
 
+/** La tabla o columna aún no existe: falta ejecutar una migración (p. ej. 0002). */
+const isMissingSchema = (msg: string) => /schema cache|does not exist|PGRST20[45]/i.test(msg);
+
 function translate(msg: string): string {
+  if (isMissingSchema(msg)) return "Falta actualizar la base de datos: ejecuta en Supabase la migración supabase/migrations/0002_products_balances.sql.";
   if (/JWT|not authenticated|401/i.test(msg)) return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (/violates row-level security/i.test(msg)) return "No tienes permiso para realizar esta acción.";
   if (/duplicate key/i.test(msg)) return "Ya existe un registro igual.";
@@ -54,12 +60,19 @@ const PAGE = 1000;
 
 export class SupabaseRepository implements FinanceRepository {
   readonly kind = "supabase" as const;
+  schemaOutdated = false;
   constructor(private sb: SupabaseClient, private userId: string) {}
 
   private async selectAll<K extends EntityKey>(entity: K): Promise<EntityMap[K][]> {
     const rows: Record<string, unknown>[] = [];
     for (let from = 0; ; from += PAGE) {
-      const data = check(await this.sb.from(TABLE[entity]).select("*").order("created_at").range(from, from + PAGE - 1));
+      const res = await this.sb.from(TABLE[entity]).select("*").order("created_at").range(from, from + PAGE - 1);
+      // Tablas nuevas que aún no existen en la BD: seguir sin ellas y avisar
+      if (res.error && OPTIONAL_ENTITIES.has(entity) && isMissingSchema(res.error.message)) {
+        this.schemaOutdated = true;
+        return [];
+      }
+      const data = check(res);
       rows.push(...(data as Record<string, unknown>[]));
       if (!data || data.length < PAGE) break;
     }
@@ -108,6 +121,14 @@ export class SupabaseRepository implements FinanceRepository {
     return Array.isArray(data) && data.length > 0;
   }
 
+  async claimProductsSeed(): Promise<boolean> {
+    if (this.schemaOutdated) return false;
+    const res = await this.sb.from("profiles").update({ products_seeded: true }).eq("id", this.userId).eq("products_seeded", false).select("id");
+    if (res.error && isMissingSchema(res.error.message)) { this.schemaOutdated = true; return false; }
+    const data = check(res);
+    return Array.isArray(data) && data.length > 0;
+  }
+
   async uploadAttachment(file: File): Promise<string> {
     if (file.size > 10 * 1024 * 1024) throw new RepoError("El archivo supera el máximo de 10 MB.");
     const ext = (file.name.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -128,8 +149,9 @@ export class SupabaseRepository implements FinanceRepository {
 
   async replaceAll(data: Omit<FinanceData, "profile"> & { profile?: Partial<Profile> }): Promise<void> {
     // Borrado en orden inverso a las dependencias, luego inserción en orden.
-    for (const e of [...ENTITY_ORDER].reverse()) check(await this.sb.from(TABLE[e]).delete().eq("user_id", this.userId));
-    for (const e of ENTITY_ORDER) {
+    const entities = ENTITY_ORDER.filter((e) => !(this.schemaOutdated && OPTIONAL_ENTITIES.has(e)));
+    for (const e of [...entities].reverse()) check(await this.sb.from(TABLE[e]).delete().eq("user_id", this.userId));
+    for (const e of entities) {
       const rows = (data[e] ?? []) as EntityMap[typeof e][];
       if (e === "categories") {
         // primero categorías padre, luego subcategorías
@@ -139,8 +161,9 @@ export class SupabaseRepository implements FinanceRepository {
       } else if (rows.length) await this.insertMany(e as EntityKey, rows as never[]);
     }
     if (data.profile) {
-      const { id: _ignored, ...rest } = data.profile as Profile;
-      await this.updateProfile({ ...rest, seeded: true });
+      const { id: _ignored, productsSeeded, balancesConfirmed, ...rest } = data.profile as Profile;
+      // Las marcas nuevas solo se envían si la BD ya tiene esas columnas (migración 0002)
+      await this.updateProfile(this.schemaOutdated ? { ...rest, seeded: true } : { ...rest, productsSeeded, balancesConfirmed, seeded: true });
     }
   }
 }

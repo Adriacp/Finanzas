@@ -4,7 +4,7 @@ import { detectMapping, mapRows, parseBankDate, toCSV } from "./csv";
 import { periodRange, previousRange } from "./dates";
 import { buildDefaultCategories } from "./defaults";
 import { filterTransactions } from "./filters";
-import { accountBalances, expenseByCategory, isPaidInFuture, netWorthSeries, summarize, wealth } from "./finance";
+import { accountBalances, adjustedInitialBalance, expenseByCategory, isPaidInFuture, netWorthSeries, summarize, wealth } from "./finance";
 import { goalProgress } from "./goals";
 import { findDuplicates, suggestCategory, unusualExpenses } from "./insights";
 import { parseAmount } from "./money";
@@ -82,10 +82,20 @@ describe("finance", () => {
     expect(s).toEqual([{ month: "2026-10", value: 1500 }, { month: "2026-11", value: 3250 }]);
   });
   it("detects paid movements dated in the future", () => {
-    expect(isPaidInFuture({ status: "paid", date: "2026-11-19" }, "2026-11-18")).toBe(true);
-    expect(isPaidInFuture({ status: "paid", date: "2026-11-18" }, "2026-11-18")).toBe(false);
-    expect(isPaidInFuture({ status: "scheduled", date: "2026-11-19" }, "2026-11-18")).toBe(false);
-    expect(isPaidInFuture({ status: "pending", date: "2026-12-01" }, "2026-11-18")).toBe(false);
+    const now = new Date(2026, 10, 18, 12, 30); // 18 nov 2026, 12:30
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-19" }, now)).toBe(true);
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-18" }, now)).toBe(false);
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-18", time: "13:30" }, now)).toBe(true); // dentro de una hora
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-18", time: "12:30" }, now)).toBe(false);
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-18", time: "09:00" }, now)).toBe(false);
+    expect(isPaidInFuture({ status: "paid", date: "2026-11-17", time: "23:00" }, now)).toBe(false);
+    expect(isPaidInFuture({ status: "scheduled", date: "2026-11-19" }, now)).toBe(false);
+    expect(isPaidInFuture({ status: "pending", date: "2026-12-01" }, now)).toBe(false);
+  });
+  it("adjusts the initial balance so the account matches the bank", () => {
+    // Saldo calculado -1,59 € pero en el banco hay 1.250 €
+    expect(adjustedInitialBalance(0, -1.59, 1250)).toBe(1251.59);
+    expect(wealth([acc("x", 1251.59)], [tx({ accountId: "x", amount: 1.59 })]).balances.get("x")).toBe(1250);
   });
   it("groups expenses by category", () => {
     const cats = buildDefaultCategories(newId);

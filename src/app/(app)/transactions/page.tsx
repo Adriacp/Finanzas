@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { countActiveFilters, filterTransactions, sortTransactions } from "@/core/filters";
 import { allTags } from "@/core/insights";
+import { itemsByTransaction } from "@/core/products";
 import type { TxFilters, TxStatus, TxType } from "@/core/types";
 import { newId } from "@/data/repository";
 import { useData, useFinance } from "@/store/finance-store";
@@ -39,6 +40,7 @@ function TransactionsInner() {
     if (params.get("status")) f.statuses = [params.get("status") as TxStatus];
     if (params.get("category")) f.categoryIds = [params.get("category")!];
     if (params.get("account")) f.accountIds = [params.get("account")!];
+    if (params.get("product")) f.productIds = [params.get("product")!];
     if (params.get("from")) f.from = params.get("from")!;
     if (params.get("to")) f.to = params.get("to")!;
     return f;
@@ -52,7 +54,8 @@ function TransactionsInner() {
 
   useEffect(() => { setLimit(PAGE); }, [filters]);
 
-  const results = useMemo(() => sortTransactions(filterTransactions(d.transactions, filters, d.categories, d.accounts)), [d, filters]);
+  const itemsMap = useMemo(() => itemsByTransaction(d.transactionItems), [d.transactionItems]);
+  const results = useMemo(() => sortTransactions(filterTransactions(d.transactions, filters, d.categories, d.accounts, itemsMap)), [d, filters, itemsMap]);
   const totals = useMemo(() => {
     let inc = 0, exp = 0;
     for (const t of results) { if (t.type === "income") inc += t.amount; if (t.type === "expense") exp += t.amount; if (t.type === "refund") exp -= t.amount; }
@@ -187,6 +190,12 @@ function FiltersDialog({ open, onOpenChange, value, onChange }: { open: boolean;
         </Field>
         <Field label="Cuenta">
           <AccountSelect accounts={d.accounts} value={f.accountIds?.[0] ?? null} placeholder="Todas" onChange={(v) => setF({ ...f, accountIds: v ? [v] : undefined })} />
+        </Field>
+        <Field label="Producto">
+          <Select value={f.productIds?.[0] ?? ""} onChange={(e) => setF({ ...f, productIds: e.target.value ? [e.target.value] : undefined })}>
+            <option value="">Todos</option>
+            {[...d.products].sort((a, b) => a.name.localeCompare(b.name, "es")).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
         </Field>
         <Field label="Comercio"><Input value={f.merchant ?? ""} onChange={(e) => setF({ ...f, merchant: e.target.value || undefined })} /></Field>
         <Field label="Desde"><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v ?? undefined })} allowClear placeholder="Cualquiera" /></Field>

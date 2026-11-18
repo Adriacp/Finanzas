@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { budgetStatuses, crossedThresholds, type BudgetStatus } from "@/core/budgets";
 import { monthKey, todayISO } from "@/core/dates";
 import { planDedupe } from "@/core/dedupe";
-import { buildDefaultAccounts, buildDefaultCategories } from "@/core/defaults";
-import type { FinanceData, Profile, Transaction } from "@/core/types";
+import { buildDefaultAccounts, buildDefaultCategories, buildDefaultProducts } from "@/core/defaults";
+import { normalize } from "@/core/insights";
+import type { FinanceData, Profile, Transaction, TransactionItem } from "@/core/types";
 import { newId, type EntityKey, type EntityMap, type FinanceRepository } from "@/data/repository";
 
 /**
@@ -25,7 +26,13 @@ interface FinanceState {
   updateProfile(patch: Partial<Omit<Profile, "id">>): Promise<void>;
   replaceAll(data: Omit<FinanceData, "profile"> & { profile?: Partial<Profile> }): Promise<void>;
   /** Guarda un movimiento y devuelve los umbrales de presupuesto que ha cruzado. */
-  saveTransaction(tx: Transaction): Promise<BudgetStatus[]>;
+  /**
+   * Guarda un movimiento y, si se pasa, su desglose por productos (sustituye al anterior).
+   * Devuelve los umbrales de presupuesto que ha cruzado.
+   */
+  saveTransaction(tx: Transaction, items?: TransactionItem[]): Promise<BudgetStatus[]>;
+  /** La BD aún no tiene las tablas de la migración 0002 (productos/desglose). */
+  schemaOutdated: boolean;
   reset(): void;
 }
 
@@ -69,6 +76,21 @@ export const useFinance = create<FinanceState>((set, get) => {
     return r.loadAll();
   }
 
+  /** Crea el catálogo de productos por defecto una sola vez (también para usuarios que ya existían). */
+  async function seedProductsIfNeeded(r: FinanceRepository, data: FinanceData): Promise<FinanceData> {
+    if (data.profile.productsSeeded || r.schemaOutdated) return data;
+    if (!(await r.claimProductsSeed())) return r.schemaOutdated ? data : r.loadAll();
+    try {
+      const existing = new Set(data.products.map((p) => normalize(p.name)));
+      const defaults = buildDefaultProducts(newId, data.categories).filter((p) => !existing.has(normalize(p.name)));
+      if (defaults.length) await r.insertMany("products", defaults);
+    } catch (e) {
+      await r.updateProfile({ productsSeeded: false }).catch(() => {});
+      throw e;
+    }
+    return r.loadAll();
+  }
+
   /** Fusiona categorías/cuentas duplicadas (p. ej. por una siembra doble) sin perder movimientos. */
   async function repairDuplicates(r: FinanceRepository, data: FinanceData): Promise<FinanceData> {
     const plan = planDedupe(data);
@@ -91,6 +113,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     status: "idle",
     error: null,
     data: null,
+    schemaOutdated: false,
 
     async init(r) {
       set({ repo: r, status: "loading", error: null });
@@ -102,7 +125,13 @@ export const useFinance = create<FinanceState>((set, get) => {
           // Si la reparación falla, se sigue con los datos tal cual (se reintentará en el próximo arranque).
           data = await r.loadAll();
         }
-        set({ data, status: "ready" });
+        try {
+          data = await seedProductsIfNeeded(r, data);
+        } catch {
+          // Si la reparación falla, se sigue con los datos tal cual (se reintentará en el próximo arranque).
+          data = await r.loadAll();
+        }
+        set({ data, status: "ready", schemaOutdated: !!r.schemaOutdated });
       } catch (e) {
         set({ status: "error", error: errMsg(e) });
       }
@@ -111,7 +140,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     async reload() {
       try {
         const data = await repo().loadAll();
-        set({ data, status: "ready", error: null });
+        set({ data, status: "ready", error: null, schemaOutdated: !!repo().schemaOutdated });
       } catch (e) {
         set({ error: errMsg(e) });
       }
@@ -148,7 +177,12 @@ export const useFinance = create<FinanceState>((set, get) => {
         () => repo().removeMany(entity, ids),
       );
       // Borrar cuentas/categorías/recurrentes afecta a otras tablas (cascadas): recargar.
-      if (entity === "accounts" || entity === "categories" || entity === "recurring") await get().reload();
+      // Sus líneas de desglose se borran en cascada en la BD: reflejarlo también aquí
+      if (entity === "transactions") {
+        const d = get().data;
+        if (d) set({ data: { ...d, transactionItems: d.transactionItems.filter((i) => !del.has(i.transactionId)) } });
+      }
+      if (entity === "accounts" || entity === "categories" || entity === "recurring" || entity === "products") await get().reload();
     },
 
     async updateProfile(patch) {
@@ -167,11 +201,23 @@ export const useFinance = create<FinanceState>((set, get) => {
       }
     },
 
-    async saveTransaction(tx) {
+    async saveTransaction(tx, items) {
       const d = get().data!;
+      const r = repo();
+      if (items?.length && r.schemaOutdated)
+        throw new Error("Para guardar el desglose por productos falta actualizar la base de datos (migración 0002).");
       const month = monthKey(tx.date);
       const before = budgetStatuses(d.budgets, d.categories, d.transactions, month);
       await get().save("transactions", tx);
+      if (items !== undefined && !r.schemaOutdated) {
+        const rows = items.map((it, i) => ({ ...it, transactionId: tx.id, sortOrder: i }));
+        const keep = new Set(rows.map((it) => it.id));
+        const removed = d.transactionItems.filter((it) => it.transactionId === tx.id && !keep.has(it.id)).map((it) => it.id);
+        if (removed.length) await r.removeMany("transactionItems", removed);
+        if (rows.length) await r.insertMany("transactionItems", rows);
+        const cur = get().data!;
+        set({ data: { ...cur, transactionItems: [...cur.transactionItems.filter((it) => it.transactionId !== tx.id), ...rows] } });
+      }
       const d2 = get().data!;
       const after = budgetStatuses(d2.budgets, d2.categories, d2.transactions, month);
       return month === monthKey(todayISO()) ? crossedThresholds(before, after) : [];

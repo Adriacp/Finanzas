@@ -1,12 +1,13 @@
 import { normalize } from "./insights";
-import type { Account, Category, Transaction, TxFilters } from "./types";
+import type { Account, Category, ID, Transaction, TransactionItem, TxFilters } from "./types";
 
 /**
  * Filtra movimientos. La búsqueda de texto `q` mira concepto, comercio,
  * descripción, notas, etiquetas, categoría, subcategoría, cuenta e importe.
  * Soporta prefijos: `>50`, `<20`, `=12.5`, `#etiqueta`.
+ * Si se pasa el desglose (`itemsByTx`), también busca por nombre de producto y permite filtrar por producto.
  */
-export function filterTransactions(txs: Transaction[], f: TxFilters, categories: Category[], accounts: Account[]): Transaction[] {
+export function filterTransactions(txs: Transaction[], f: TxFilters, categories: Category[], accounts: Account[], itemsByTx?: Map<ID, TransactionItem[]>): Transaction[] {
   const catName = new Map(categories.map((c) => [c.id, normalize(c.name)]));
   const accName = new Map(accounts.map((a) => [a.id, normalize(a.name)]));
   const terms = (f.q ?? "").trim().split(/\s+/).filter(Boolean);
@@ -23,6 +24,7 @@ export function filterTransactions(txs: Transaction[], f: TxFilters, categories:
     if (f.to && t.date > f.to) return false;
     if (f.minAmount != null && t.amount < f.minAmount) return false;
     if (f.maxAmount != null && t.amount > f.maxAmount) return false;
+    if (f.productIds?.length && !(itemsByTx?.get(t.id) ?? []).some((it) => it.productId && f.productIds!.includes(it.productId))) return false;
     if (f.fixed === "fixed" && !t.isFixed) return false;
     if (f.fixed === "variable" && t.isFixed) return false;
 
@@ -45,6 +47,7 @@ export function filterTransactions(txs: Transaction[], f: TxFilters, categories:
         t.concept, t.merchant, t.description, t.notes, t.paymentMethod, t.date,
         t.amount.toFixed(2), t.amount.toFixed(2).replace(".", ","), ...t.tags,
         catName.get(t.categoryId ?? ""), catName.get(t.subcategoryId ?? ""), accName.get(t.accountId ?? ""),
+        ...(itemsByTx?.get(t.id) ?? []).map((it) => it.name),
       ]
         .filter(Boolean)
         .map((x) => normalize(String(x)))
@@ -58,7 +61,7 @@ export function filterTransactions(txs: Transaction[], f: TxFilters, categories:
 export const countActiveFilters = (f: TxFilters) =>
   (f.types?.length ? 1 : 0) + (f.statuses?.length ? 1 : 0) + (f.categoryIds?.length ? 1 : 0) + (f.subcategoryIds?.length ? 1 : 0) +
   (f.accountIds?.length ? 1 : 0) + (f.tags?.length ? 1 : 0) + (f.merchant ? 1 : 0) + (f.from || f.to ? 1 : 0) +
-  (f.minAmount != null || f.maxAmount != null ? 1 : 0) + (f.fixed ? 1 : 0);
+  (f.minAmount != null || f.maxAmount != null ? 1 : 0) + (f.fixed ? 1 : 0) + (f.productIds?.length ? 1 : 0);
 
 export const sortTransactions = (txs: Transaction[]) =>
   [...txs].sort((a, b) => (a.date === b.date ? (b.time ?? "").localeCompare(a.time ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? "") : a.date < b.date ? 1 : -1));

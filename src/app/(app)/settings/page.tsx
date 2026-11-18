@@ -42,7 +42,7 @@ export default function SettingsPage() {
   async function resetAll() {
     if (!confirm("¿Borrar TODOS tus datos? Se recomienda descargar antes una copia de seguridad. Esta acción no se puede deshacer.")) return;
     if (!confirm("Confirmación final: ¿borrar todo?")) return;
-    await replaceAll({ accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [], profile: { seeded: false } });
+    await replaceAll({ accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [], products: [], transactionItems: [], profile: { seeded: false, productsSeeded: false, balancesConfirmed: false } });
     await useFinance.getState().updateProfile({ seeded: false });
     toast.success("Datos borrados. Recarga para empezar de cero.");
     setTimeout(() => window.location.reload(), 800);

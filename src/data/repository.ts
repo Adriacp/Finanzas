@@ -1,4 +1,4 @@
-import type { Account, Budget, Category, FinanceData, Goal, Profile, Recurring, SavedView, Transaction } from "@/core/types";
+import type { Account, Budget, Category, FinanceData, Goal, Product, Profile, Recurring, SavedView, Transaction, TransactionItem } from "@/core/types";
 
 /**
  * Contrato de acceso a datos. La UI y el store solo hablan con esta interfaz,
@@ -13,6 +13,8 @@ export interface EntityMap {
   recurring: Recurring;
   goals: Goal;
   savedViews: SavedView;
+  products: Product;
+  transactionItems: TransactionItem;
 }
 export type EntityKey = keyof EntityMap;
 
@@ -30,6 +32,13 @@ export interface FinanceRepository {
    * se abren dos pestañas o dispositivos a la vez).
    */
   claimSeed(): Promise<boolean>;
+  /** Igual que claimSeed, para el catálogo de productos por defecto (usuarios nuevos y existentes). */
+  claimProductsSeed(): Promise<boolean>;
+  /**
+   * true si la base de datos no tiene aún las tablas/columnas nuevas (falta ejecutar una migración).
+   * La app sigue funcionando sin esas funciones y muestra un aviso.
+   */
+  readonly schemaOutdated?: boolean;
   uploadAttachment(file: File): Promise<string>;
   attachmentUrl(path: string): Promise<string>;
   removeAttachment(path: string): Promise<void>;
@@ -46,4 +55,7 @@ export const newId = (): string =>
       });
 
 /** Orden seguro de inserción/borrado respetando claves foráneas. */
-export const ENTITY_ORDER: EntityKey[] = ["accounts", "categories", "recurring", "transactions", "budgets", "goals", "savedViews"];
+export const ENTITY_ORDER: EntityKey[] = ["accounts", "categories", "products", "recurring", "transactions", "transactionItems", "budgets", "goals", "savedViews"];
+
+/** Entidades añadidas en la migración 0002: si faltan sus tablas, la app sigue funcionando sin ellas. */
+export const OPTIONAL_ENTITIES = new Set<EntityKey>(["products", "transactionItems"]);

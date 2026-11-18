@@ -1,17 +1,19 @@
 "use client";
 import { addDays, subMonths } from "date-fns";
-import { ArrowRight, CalendarClock, Lightbulb, Plus, TrendingDown, TrendingUp, TriangleAlert, CircleCheck, Sparkle } from "lucide-react";
+import { ArrowRight, Landmark, CalendarClock, Lightbulb, Plus, TrendingDown, TrendingUp, TriangleAlert, CircleCheck, Sparkle } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { budgetStatuses } from "@/core/budgets";
 import { fromISO, monthKey, monthsBetween, PERIOD_LABELS, previousRange, todayISO, toISO, formatDate } from "@/core/dates";
 import { expenseByCategory, monthlySeries, netWorthSeries, pctChange, summarize, wealth } from "@/core/finance";
 import { monthlyInsights } from "@/core/insights";
 import { upcomingPayments } from "@/core/recurring";
 import { sortTransactions } from "@/core/filters";
-import { useData } from "@/store/finance-store";
+import { useData, useFinance } from "@/store/finance-store";
 import { useTxDialog } from "@/store/ui-store";
 import { Button } from "@/components/ui/button";
+import { BalanceSetupDialog } from "@/components/forms/balance-setup";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { IconBadge } from "@/components/ui/icon";
 import { EmptyState, Progress } from "@/components/ui/misc";
@@ -54,6 +56,10 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 7 ? "Buenas noches" : hour < 14 ? "Buenos días" : hour < 21 ? "Buenas tardes" : "Buenas noches";
   const isEmpty = d.transactions.length === 0;
+  const schemaOutdated = useFinance((s) => s.schemaOutdated);
+  const updateProfile = useFinance((s) => s.updateProfile);
+  const [balancesOpen, setBalancesOpen] = useState(false);
+  const askBalances = d.profile.balancesConfirmed !== true && !schemaOutdated && d.accounts.some((a) => !a.archived);
 
   return (
     <div className="space-y-5 md:space-y-6">
@@ -64,6 +70,21 @@ export default function DashboardPage() {
         </div>
         <PeriodPicker />
       </div>
+
+      {askBalances && (
+        <Card className="flex flex-wrap items-center gap-3 border-primary/30 bg-accent/40 p-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary"><Landmark className="size-5" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">¿Cuánto dinero tienes de verdad en cada cuenta?</p>
+            <p className="text-sm text-muted-foreground">Indica tu saldo real para que «Disponible» y «Patrimonio» cuadren con tu banco.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => updateProfile({ balancesConfirmed: true }).catch((e) => toast.error((e as Error).message))}>Ya están bien</Button>
+            <Button size="sm" onClick={() => setBalancesOpen(true)}>Indicar saldos</Button>
+          </div>
+        </Card>
+      )}
+      <BalanceSetupDialog open={balancesOpen} onOpenChange={setBalancesOpen} />
 
       {/* Patrimonio */}
       <Card className="relative overflow-hidden">

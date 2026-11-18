@@ -29,6 +29,10 @@ export interface Profile {
   currency: string;
   monthlyBudget: number | null;
   seeded: boolean;
+  /** Catálogo de productos por defecto ya creado (opcional: perfiles antiguos sin la migración 0002). */
+  productsSeeded?: boolean;
+  /** El usuario ya ha revisado/ajustado los saldos reales de sus cuentas. */
+  balancesConfirmed?: boolean;
 }
 
 export interface Account {
@@ -111,6 +115,29 @@ export interface Recurring {
   notes: string | null;
 }
 
+/** Producto del catálogo del usuario (p. ej. «Huevos», «Gasolina 95»). */
+export interface Product {
+  id: ID;
+  name: string;
+  /** Unidad de precio: ud, kg, l, docena, paquete… */
+  unit: string;
+  categoryId: ID | null;
+}
+
+/** Línea del desglose de un movimiento (opcional). */
+export interface TransactionItem {
+  id: ID;
+  transactionId: ID;
+  productId: ID | null;
+  /** Nombre en el momento de la compra (se conserva aunque se borre el producto). */
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  /** Total de la línea (cantidad × precio; negativo para descuentos). */
+  amount: number;
+  sortOrder: number;
+}
+
 export interface Goal {
   id: ID;
   name: string;
@@ -137,6 +164,8 @@ export interface TxFilters {
   to?: ISODate;
   minAmount?: number;
   maxAmount?: number;
+  /** Movimientos que incluyen alguno de estos productos en su desglose */
+  productIds?: ID[];
   fixed?: "fixed" | "variable";
 }
 
@@ -155,6 +184,8 @@ export interface FinanceData {
   recurring: Recurring[];
   goals: Goal[];
   savedViews: SavedView[];
+  products: Product[];
+  transactionItems: TransactionItem[];
 }
 
 export type NewEntity<T extends { id: ID }> = Omit<T, "id"> & { id?: ID };

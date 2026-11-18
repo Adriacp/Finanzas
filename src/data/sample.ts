@@ -1,8 +1,9 @@
 import { addDays, endOfMonth, startOfMonth, subMonths } from "date-fns";
-import { buildDefaultCategories } from "@/core/defaults";
+import { buildDefaultCategories, buildDefaultProducts } from "@/core/defaults";
+import { lineTotal } from "@/core/products";
 import { toISO } from "@/core/dates";
 import { round2 } from "@/core/money";
-import type { Account, Budget, Category, FinanceData, Goal, Recurring, Transaction } from "@/core/types";
+import type { Account, Budget, Category, FinanceData, Goal, Recurring, Transaction, TransactionItem } from "@/core/types";
 import { newId } from "./repository";
 
 /** Datos de ejemplo realistas (6 meses) para explorar la app en modo demo. */
@@ -55,6 +56,31 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
     endDate: toISO(subMonths(today, 2)), ...sub("Streaming"), accountId: main.id, isSubscription: true, isFixed: true, status: "cancelled", usage: "low", merchant: "Disney+", notes: null });
 
   const supermarkets = ["Mercadona", "Carrefour", "Lidl", "Día"];
+  // Catálogo y compras con desglose por productos (precio distinto según el súper)
+  const products = buildDefaultProducts(newId, categories);
+  const prod = (name: string) => products.find((p) => p.name === name)!;
+  const transactionItems: TransactionItem[] = [];
+  const PRICE_FACTOR: Record<string, number> = { Mercadona: 1, Carrefour: 1.06, Lidl: 0.9, "Día": 0.96 };
+  const BASKET: Array<[string, number, [number, number]]> = [
+    ["Huevos", 2.35, [1, 1]], ["Leche", 0.95, [3, 6]], ["Pan", 1.1, [1, 2]], ["Plátanos", 1.89, [0.8, 1.6]], ["Tomates", 2.2, [0.5, 1.5]],
+    ["Pollo", 6.5, [0.6, 1.2]], ["Yogures", 1.75, [1, 2]], ["Café", 4.2, [1, 1]], ["Aceite de oliva", 8.9, [1, 1]], ["Pasta", 1.3, [1, 2]],
+    ["Agua", 0.35, [6, 12]], ["Queso", 3.6, [1, 1]], ["Papel higiénico", 4.5, [1, 1]],
+  ];
+  const buySuper = (iso: string) => {
+    const shop = supermarkets[Math.floor(rnd() * 4)];
+    const txId = newId();
+    const picked = BASKET.filter((_, i) => i < 3 || rnd() > 0.55); // huevos, leche y pan casi siempre
+    const items = picked.map(([name, base, [qMin, qMax]], i): TransactionItem => {
+      const quantity = qMin === qMax ? qMin : Number.isInteger(qMin) ? Math.round(between(qMin, qMax)) : round2(between(qMin, qMax));
+      const unitPrice = round2(base * PRICE_FACTOR[shop] * between(0.96, 1.04));
+      return { id: newId(), transactionId: txId, productId: prod(name).id, name, quantity, unitPrice, amount: lineTotal(quantity, unitPrice), sortOrder: i };
+    });
+    // 3 de cada 4 compras llevan desglose; el resto solo el total (el desglose es opcional)
+    const withItems = rnd() > 0.25;
+    if (withItems) transactionItems.push(...items);
+    const total = withItems ? round2(items.reduce((s, it) => s + it.amount, 0)) : between(25, 95);
+    add({ id: txId, concept: `Compra ${shop}`, merchant: shop, amount: total, date: iso, ...sub("Supermercado"), time: "11:30" });
+  };
   const restaurants = ["La Tagliatella", "Sushi Bar Koi", "Taberna El Pez", "Burger Joint"];
   const todayISO = toISO(today);
 
@@ -78,7 +104,7 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
     for (let day = new Date(start); day <= end; day = addDays(day, 1)) {
       const iso = toISO(day);
       const wd = day.getDay();
-      if (wd === 6 || (wd === 3 && rnd() > 0.4)) add({ concept: `Compra ${supermarkets[Math.floor(rnd() * 4)]}`, merchant: supermarkets[Math.floor(rnd() * 4)], amount: between(25, 95), date: iso, ...sub("Supermercado"), time: "11:30" });
+      if (wd === 6 || (wd === 3 && rnd() > 0.4)) buySuper(iso);
       if (rnd() > 0.72) add({ concept: "Café", merchant: "Starbucks", amount: between(2.2, 4.8), date: iso, ...sub("Cafeterías"), accountId: rnd() > 0.5 ? cash.id : main.id, paymentMethod: "Apple Pay", time: "09:10" });
       if ((wd === 5 || wd === 6) && rnd() > 0.45) { const r = restaurants[Math.floor(rnd() * 4)]; add({ concept: `Cena ${r}`, merchant: r, amount: between(22, 68), date: iso, ...sub("Restaurantes"), accountId: credit.id, time: "21:30", tags: rnd() > 0.5 ? ["amigos"] : [] }); }
       if (wd === 1 && rnd() > 0.3) add({ concept: "Gasolina", merchant: "Repsol", amount: between(45, 70), date: iso, ...sub("Gasolina"), time: "18:00" });
@@ -113,5 +139,5 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
     { id: newId(), name: "Entrada vivienda", targetAmount: 40000, savedAmount: 4200, deadline: toISO(new Date(today.getFullYear() + 4, 0, 1)), accountId: null, color: "#6366f1", icon: "house", notes: null, archived: false },
   ];
 
-  return { accounts, categories, transactions, budgets, recurring, goals, savedViews: [{ id: newId(), name: "Cenas con amigos", filters: { q: "#amigos" } }] };
+  return { accounts, categories, transactions, budgets, recurring, goals, products, transactionItems, savedViews: [{ id: newId(), name: "Cenas con amigos", filters: { q: "#amigos" } }] };
 }

@@ -1,7 +1,7 @@
 import { endOfMonth } from "date-fns";
 import { type DateRange, fromISO, inRange, monthKey, toISO, daysInRange } from "./dates";
 import { round2 } from "./money";
-import type { Account, AccountType, Category, ID, ISODate, Transaction } from "./types";
+import type { Account, AccountType, Category, ID, Transaction } from "./types";
 
 /** Solo los movimientos pagados afectan a saldos y totales reales. */
 export const isEffective = (t: Transaction) => t.status === "paid";
@@ -10,7 +10,22 @@ export const isEffective = (t: Transaction) => t.status === "paid";
  * Movimiento marcado como pagado pero con fecha posterior a hoy. Suele ser un error:
  * cuenta ya en saldos y gastos aunque el dinero aún no ha salido (debería estar programado).
  */
-export const isPaidInFuture = (t: Pick<Transaction, "status" | "date">, today: ISODate) => t.status === "paid" && t.date > today;
+export function isPaidInFuture(t: Pick<Transaction, "status" | "date"> & { time?: string | null }, now: Date = new Date()): boolean {
+  if (t.status !== "paid") return false;
+  const today = toISO(now);
+  if (t.date !== today) return t.date > today;
+  // Mismo día: es futuro si tiene una hora posterior a la actual (p. ej. dentro de una hora)
+  if (!t.time) return false;
+  const nowHM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return t.time.slice(0, 5) > nowHM;
+}
+
+/**
+ * Saldo inicial necesario para que el saldo calculado de una cuenta coincida con el real del banco.
+ * No crea movimientos: así ingresos, gastos y estadísticas no se alteran.
+ */
+export const adjustedInitialBalance = (initialBalance: number, currentBalance: number, realBalance: number) =>
+  round2(initialBalance + (realBalance - currentBalance));
 
 /**
  * Efecto neto de un movimiento sobre los gastos:

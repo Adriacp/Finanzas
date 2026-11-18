@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ReactNode } from "react";
-import { formatMonth } from "@/core/dates";
+import { formatDate, formatMonth } from "@/core/dates";
 import type { CategoryTotal, MonthPoint } from "@/core/finance";
 import { useMoney } from "@/components/ui/money";
 
@@ -139,6 +139,25 @@ export function ForecastLine({ data, height = 200 }: { data: { label: string; va
         <Tooltip content={({ active, payload, label }: TipProps) =>
           active && payload?.length ? <TooltipBox title={String(label)} rows={[{ label: "Ahorro acumulado", value: fmt(Number(payload[0].value)), color: "var(--income)" }]} /> : null} />
         <Line type="monotone" dataKey="value" stroke="var(--income)" strokeWidth={2.4} strokeDasharray="6 4" dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Evolución del precio unitario de un producto (un punto por compra). */
+export function PriceHistoryChart({ data, height = 180, unit }: { data: { date: string; price: number; merchant: string | null }[]; height?: number; unit: string }) {
+  const fmt = useMoney();
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="3 3" />
+        <XAxis dataKey="date" tickFormatter={(d) => formatDate(String(d), "d MMM")} minTickGap={24} {...axis} />
+        <YAxis tickFormatter={(v) => fmt(v)} width={64} domain={["auto", "auto"]} {...axis} />
+        <Tooltip content={({ active, payload }: TipProps) => {
+          const p = payload?.[0]?.payload as { date: string; price: number; merchant: string | null } | undefined;
+          return active && p ? <TooltipBox title={formatDate(p.date)} rows={[{ label: p.merchant ?? "Sin comercio", value: `${fmt(p.price)} / ${unit}`, color: "var(--chart-1)" }]} /> : null;
+        }} />
+        <Line type="monotone" dataKey="price" stroke="var(--chart-1)" strokeWidth={2.2} dot={{ r: 3, fill: "var(--chart-1)" }} activeDot={{ r: 5 }} />
       </LineChart>
     </ResponsiveContainer>
   );

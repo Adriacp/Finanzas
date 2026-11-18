@@ -107,3 +107,9 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+export const productSchema = z.object({
+  name: z.string().trim().min(1, "Escribe un nombre").max(80, "Máximo 80 caracteres"),
+  unit: z.string().trim().min(1, "Elige una unidad").max(20),
+  categoryId: id.nullable(),
+});

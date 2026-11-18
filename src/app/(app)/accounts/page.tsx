@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeftRight, Pencil, Plus, Wallet } from "lucide-react";
+import { ArrowLeftRight, Pencil, Plus, Scale, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -19,11 +19,13 @@ import { EmptyState, PageHeader, Switch } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { Money } from "@/components/ui/money";
 import { ColorPicker } from "@/components/forms/pickers";
+import { BalanceSetupDialog } from "@/components/forms/balance-setup";
 
 export default function AccountsPage() {
   const d = useData();
   const openNew = useTxDialog((s) => s.openNew);
   const [editing, setEditing] = useState<Account | "new" | null>(null);
+  const [balancesOpen, setBalancesOpen] = useState(false);
   const w = useMemo(() => wealth(d.accounts, d.transactions), [d.accounts, d.transactions]);
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -38,6 +40,7 @@ export default function AccountsPage() {
     <div>
       <PageHeader title="Cuentas" subtitle="Bancos, efectivo, tarjetas y otras cuentas"
         actions={<>
+          <Button variant="secondary" onClick={() => setBalancesOpen(true)}><Scale /> Ajustar saldos</Button>
           <Button variant="secondary" onClick={() => openNew({ type: "transfer" })}><ArrowLeftRight /> Transferir</Button>
           <Button onClick={() => setEditing("new")}><Plus /> Nueva cuenta</Button>
         </>} />
@@ -76,6 +79,7 @@ export default function AccountsPage() {
           })}
         </div>
       )}
+      <BalanceSetupDialog open={balancesOpen} onOpenChange={setBalancesOpen} />
       <AccountDialog value={editing} onClose={() => setEditing(null)} count={editing && editing !== "new" ? counts.get(editing.id) ?? 0 : 0} />
     </div>
   );

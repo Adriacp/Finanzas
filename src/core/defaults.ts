@@ -1,4 +1,4 @@
-import type { Account, AccountType, Category, CategoryKind } from "./types";
+import type { Account, AccountType, Category, CategoryKind, Product } from "./types";
 
 interface CategorySeed {
   name: string;
@@ -102,3 +102,31 @@ export const CATEGORY_ICONS = [
   "pill", "baby", "shirt", "smartphone", "laptop", "book-open", "briefcase", "piggy-bank", "receipt", "zap", "droplet", "wifi",
   "wrench", "sparkles", "tag", "wallet", "banknote", "credit-card", "target", "umbrella", "hammer", "tree-palm", "beer", "ticket",
 ];
+
+// ---------------------------------------------------------------------------
+// Productos por defecto (el usuario puede añadir, editar y borrar los suyos)
+// [nombre, unidad, subcategoría por defecto]
+// ---------------------------------------------------------------------------
+export const DEFAULT_PRODUCTS: Array<[string, string, string]> = [
+  ["Huevos", "docena", "Supermercado"], ["Leche", "l", "Supermercado"], ["Pan", "ud", "Supermercado"],
+  ["Agua", "l", "Supermercado"], ["Aceite de oliva", "l", "Supermercado"], ["Arroz", "kg", "Supermercado"],
+  ["Pasta", "kg", "Supermercado"], ["Pollo", "kg", "Supermercado"], ["Carne picada", "kg", "Supermercado"],
+  ["Pescado", "kg", "Supermercado"], ["Plátanos", "kg", "Supermercado"], ["Manzanas", "kg", "Supermercado"],
+  ["Tomates", "kg", "Supermercado"], ["Patatas", "kg", "Supermercado"], ["Cebollas", "kg", "Supermercado"],
+  ["Lechuga", "ud", "Supermercado"], ["Yogures", "paquete", "Supermercado"], ["Queso", "ud", "Supermercado"],
+  ["Jamón", "ud", "Supermercado"], ["Café", "ud", "Supermercado"], ["Cereales", "ud", "Supermercado"],
+  ["Galletas", "ud", "Supermercado"], ["Cerveza", "ud", "Supermercado"], ["Vino", "ud", "Supermercado"],
+  ["Refrescos", "ud", "Supermercado"], ["Papel higiénico", "paquete", "Limpieza"], ["Detergente", "ud", "Limpieza"],
+  ["Lavavajillas", "ud", "Limpieza"], ["Champú", "ud", "Cuidado personal"], ["Gel de ducha", "ud", "Cuidado personal"],
+  ["Pasta de dientes", "ud", "Cuidado personal"], ["Gasolina 95", "l", "Gasolina"], ["Diésel", "l", "Gasolina"],
+  ["Comida para mascotas", "kg", "Alimentación"],
+];
+
+export const PRODUCT_UNITS = ["ud", "kg", "g", "l", "ml", "docena", "paquete", "caja", "botella", "lata"];
+
+/** Construye el catálogo por defecto, enlazando cada producto a la subcategoría que exista con ese nombre. */
+export function buildDefaultProducts(newId: () => string, categories: Category[]): Product[] {
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const sub = (name: string) => categories.find((c) => c.parentId && norm(c.name) === norm(name))?.id ?? null;
+  return DEFAULT_PRODUCTS.map(([name, unit, cat]) => ({ id: newId(), name, unit, categoryId: sub(cat) }));
+}

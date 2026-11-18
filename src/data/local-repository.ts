@@ -11,8 +11,8 @@ const KEY = "finanzas-demo-v1";
 const FILES_KEY = "finanzas-demo-files-v1";
 
 const empty = (): FinanceData => ({
-  profile: { id: "demo", displayName: "Demo", currency: "EUR", monthlyBudget: null, seeded: false },
-  accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [],
+  profile: { id: "demo", displayName: "Demo", currency: "EUR", monthlyBudget: null, seeded: false, productsSeeded: false, balancesConfirmed: false },
+  accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [], products: [], transactionItems: [],
 });
 
 export class LocalRepository implements FinanceRepository {
@@ -83,6 +83,9 @@ export class LocalRepository implements FinanceRepository {
       d.goals = d.goals.map((g) => (del.has(g.accountId ?? "") ? { ...g, accountId: null } : g));
     }
     if (entity === "recurring") d.transactions = d.transactions.map((t) => (del.has(t.recurringId ?? "") ? { ...t, recurringId: null } : t));
+    if (entity === "transactions") d.transactionItems = d.transactionItems.filter((i) => !del.has(i.transactionId)); // cascade
+    if (entity === "products") d.transactionItems = d.transactionItems.map((i) => (del.has(i.productId ?? "") ? { ...i, productId: null } : i));
+    if (entity === "categories") d.products = d.products.map((p) => (del.has(p.categoryId ?? "") ? { ...p, categoryId: null } : p));
     (d[entity] as EntityMap[K][]) = (d[entity] as EntityMap[K][]).filter((x) => !del.has(x.id));
     this.write();
   }
@@ -91,6 +94,14 @@ export class LocalRepository implements FinanceRepository {
     this.data.profile = { ...this.data.profile, ...patch };
     this.write();
     return { ...this.data.profile };
+  }
+
+  async claimProductsSeed(): Promise<boolean> {
+    this.data = this.read();
+    if (this.data.profile.productsSeeded) return false;
+    this.data.profile.productsSeeded = true;
+    this.write();
+    return true;
   }
 
   async claimSeed(): Promise<boolean> {

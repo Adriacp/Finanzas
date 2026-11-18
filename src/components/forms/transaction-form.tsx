@@ -1,12 +1,12 @@
 "use client";
-import { ChevronDown, Copy, Paperclip, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, ShoppingBasket, Copy, Paperclip, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatDate, relativeDayLabel, todayISO } from "@/core/dates";
 import { isPaidInFuture } from "@/core/finance";
 import { allTags, findDuplicates, merchantSuggestions, suggestCategory } from "@/core/insights";
 import { parseAmount } from "@/core/money";
-import type { Transaction, TxStatus, TxType } from "@/core/types";
+import type { Transaction, TransactionItem, TxStatus, TxType } from "@/core/types";
 import { fieldErrors, transactionSchema } from "@/core/validation";
 import { newId } from "@/data/repository";
 import { useFinance } from "@/store/finance-store";
@@ -17,6 +17,7 @@ import { Segmented, Switch } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useMoney } from "@/components/ui/money";
 import { AccountSelect, CategorySelect, PaymentMethodSelect, SubcategorySelect, TagInput } from "./pickers";
+import { ItemsEditor } from "./items-editor";
 import { cn } from "@/lib/utils";
 import { DatePicker, TimePicker } from "@/components/ui/date-time";
 
@@ -52,9 +53,9 @@ export function TransactionDialog() {
 }
 
 function TransactionForm() {
-  const { initial, mode, close, openDuplicate } = useTxDialog();
+  const { initial, mode, close, openDuplicate, sourceId } = useTxDialog();
   const data = useFinance((s) => s.data)!;
-  const { saveTransaction, remove, repo } = useFinance();
+  const { saveTransaction, remove, repo, schemaOutdated } = useFinance();
   const fmt = useMoney();
   const defaultAccount = data.accounts.find((a) => !a.archived)?.id ?? null;
   const [tx, setTx] = useState<Omit<Transaction, "id"> & { id?: string }>(() => ({ ...blank(defaultAccount), ...(initial ?? {}) }));
@@ -63,6 +64,14 @@ function TransactionForm() {
   const [saving, setSaving] = useState(false);
   const [futureAsk, setFutureAsk] = useState<{ again: boolean } | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  // Desglose por productos (opcional): al editar se carga el existente; al duplicar se copia
+  const [items, setItems] = useState<TransactionItem[]>(() => {
+    const src = mode === "edit" ? initial?.id : sourceId;
+    if (!src) return [];
+    const list = data.transactionItems.filter((i) => i.transactionId === src).sort((a, b) => a.sortOrder - b.sortOrder);
+    return mode === "edit" ? list : list.map((i) => ({ ...i, id: newId() }));
+  });
+  const [showItems, setShowItems] = useState(() => items.length > 0);
   const [showMore, setShowMore] = useState(mode === "edit" && !!(initial?.merchant || initial?.notes || initial?.tags?.length || initial?.description || initial?.attachmentPath));
   const categoryTouched = useRef(mode === "edit" || !!initial?.categoryId);
   const amountRef = useRef<HTMLInputElement>(null);
@@ -110,8 +119,19 @@ function TransactionForm() {
       return;
     }
     setErrors({});
+    const lines = candidate.type === "expense" ? items : [];
+    if (lines.some((i) => !i.productId || !i.name.trim())) {
+      setShowItems(true);
+      toast.error("Elige el producto de cada línea del desglose o quita las líneas vacías");
+      return;
+    }
+    if (lines.some((i) => !(i.quantity > 0))) {
+      setShowItems(true);
+      toast.error("La cantidad de cada producto debe ser mayor que 0");
+      return;
+    }
     // «Pagado» con fecha futura: casi siempre debería estar programado. Preguntar antes de guardar.
-    if (!opts.confirmedFuture && isPaidInFuture(candidate, todayISO())) {
+    if (!opts.confirmedFuture && isPaidInFuture(candidate, new Date())) {
       setFutureAsk({ again });
       return;
     }
@@ -125,7 +145,7 @@ function TransactionForm() {
         if (candidate.attachmentPath) repo.removeAttachment(candidate.attachmentPath).catch(() => {});
       }
       const row: Transaction = { ...candidate, ...parsed.data, attachmentPath, id: tx.id ?? newId(), createdAt: tx.createdAt };
-      const alerts = await saveTransaction(row);
+      const alerts = await saveTransaction(row, row.type === "expense" ? items : []);
       toast.success(mode === "edit" ? "Movimiento actualizado" : "Movimiento guardado", { description: `${row.concept} · ${fmt(row.amount)}` });
       for (const a of alerts) {
         const msg = a.threshold! >= 100 ? `Has superado el presupuesto de ${a.name}` : `Has consumido el ${a.threshold} % del presupuesto de ${a.name}`;
@@ -134,6 +154,7 @@ function TransactionForm() {
       if (again) {
         setTx({ ...blank(row.accountId), date: row.date, type: row.type });
         setAmountText("");
+        setItems([]);
         setFile(null);
         categoryTouched.current = false;
         amountRef.current?.focus();
@@ -237,6 +258,27 @@ function TransactionForm() {
         </div>
       )}
 
+      {tx.type === "expense" && (
+        <div className="rounded-xl border border-border">
+          <button type="button" onClick={() => setShowItems((s) => !s)}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium cursor-pointer">
+            <span className="flex items-center gap-2">
+              <ShoppingBasket className="size-4 text-muted-foreground" /> Desglose por productos
+              {items.length > 0 ? <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] text-accent-foreground">{items.length}</span>
+                : <span className="text-xs font-normal text-muted-foreground">(opcional)</span>}
+            </span>
+            <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", showItems && "rotate-180")} />
+          </button>
+          {showItems && (
+            <div className="border-t border-border p-2.5">
+              {schemaOutdated
+                ? <p className="text-xs text-muted-foreground">Para guardar el desglose falta actualizar la base de datos (migración 0002).</p>
+                : <ItemsEditor items={items} onChange={setItems} amount={Math.abs(amount)} onUseSum={(sum) => setAmountText(String(sum).replace(".", ","))} />}
+            </div>
+          )}
+        </div>
+      )}
+
       <button type="button" onClick={() => setShowMore((s) => !s)} className="flex w-full items-center justify-between rounded-xl px-1 py-1 text-sm font-medium text-muted-foreground hover:text-foreground cursor-pointer">
         Más detalles <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} />
       </button>
@@ -298,8 +340,10 @@ function TransactionForm() {
         </>}>
         <div className="space-y-3 text-sm">
           <p>
-            Has marcado como <b>pagado</b> «{tx.concept.trim() || "este movimiento"}» por <b className="tabular">{fmt(Math.abs(amount))}</b> con
-            fecha <b>{relativeDayLabel(tx.date).toLowerCase()}</b>{tx.date ? ` (${formatDate(tx.date)})` : ""}.
+            Has marcado como <b>pagado</b> «{tx.concept.trim() || "este movimiento"}» por <b className="tabular">{fmt(Math.abs(amount))}</b> con{" "}
+            {tx.date === todayISO() && tx.time
+              ? <>fecha <b>hoy a las {tx.time.slice(0, 5)}</b>, una hora que todavía no ha llegado.</>
+              : <>fecha <b>{relativeDayLabel(tx.date).toLowerCase()}</b>{tx.date ? ` (${formatDate(tx.date)})` : ""}.</>}
           </p>
           <p className="text-muted-foreground">
             Un movimiento pagado cuenta ya en tus saldos y gastos. Si el dinero todavía no ha salido, márcalo como <b className="text-foreground">programado</b>:

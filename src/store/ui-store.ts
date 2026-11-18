@@ -8,6 +8,8 @@ interface TxDialogState {
   open: boolean;
   initial: Partial<Transaction> | null;
   mode: "create" | "edit";
+  /** Al duplicar: movimiento original (para copiar también su desglose) */
+  sourceId: string | null;
   defaultType: TxType;
   openNew(defaults?: Partial<Transaction>): void;
   openEdit(tx: Transaction): void;
@@ -19,12 +21,13 @@ export const useTxDialog = create<TxDialogState>((set) => ({
   open: false,
   initial: null,
   mode: "create",
+  sourceId: null,
   defaultType: "expense",
-  openNew: (defaults) => set({ open: true, mode: "create", initial: defaults ?? null }),
-  openEdit: (tx) => set({ open: true, mode: "edit", initial: tx }),
+  openNew: (defaults) => set({ open: true, mode: "create", initial: defaults ?? null, sourceId: null }),
+  openEdit: (tx) => set({ open: true, mode: "edit", initial: tx, sourceId: null }),
   openDuplicate: (tx) => {
     const { id: _id, createdAt: _c, attachmentPath: _a, ...rest } = tx;
-    set({ open: true, mode: "create", initial: { ...rest, attachmentPath: null } });
+    set({ open: true, mode: "create", initial: { ...rest, attachmentPath: null }, sourceId: tx.id });
   },
   close: () => set({ open: false }),
 }));

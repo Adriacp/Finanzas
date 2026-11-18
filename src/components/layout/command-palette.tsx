@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { formatDate } from "@/core/dates";
 import { filterTransactions, sortTransactions } from "@/core/filters";
+import { itemsByTransaction } from "@/core/products";
 import { useFinance } from "@/store/finance-store";
 import { useCommand, useTxDialog } from "@/store/ui-store";
 import { IconBadge } from "@/components/ui/icon";
@@ -23,7 +24,7 @@ export function CommandPalette() {
 
   const results = useMemo(() => {
     if (!data || q.trim().length < 2) return [];
-    return sortTransactions(filterTransactions(data.transactions, { q }, data.categories, data.accounts)).slice(0, 30);
+    return sortTransactions(filterTransactions(data.transactions, { q }, data.categories, data.accounts, itemsByTransaction(data.transactionItems))).slice(0, 30);
   }, [data, q]);
   const catById = useMemo(() => new Map((data?.categories ?? []).map((c) => [c.id, c])), [data]);
 

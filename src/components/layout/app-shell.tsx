@@ -1,7 +1,7 @@
 "use client";
 import {
   ArrowLeftRight, CalendarDays, ChartPie, Ellipsis, Eye, EyeOff, FileText, Goal, LayoutDashboard, Plus, Repeat, Search, Settings,
-  Tags, Wallet, PiggyBank, LoaderCircle, TriangleAlert, Database,
+  Tags, Wallet, PiggyBank, ShoppingBasket, LoaderCircle, TriangleAlert, Database,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ export const NAV = [
   { href: "/", label: "Inicio", icon: LayoutDashboard },
   { href: "/transactions", label: "Movimientos", icon: ArrowLeftRight },
   { href: "/analytics", label: "Análisis", icon: ChartPie },
+  { href: "/products", label: "Productos", icon: ShoppingBasket },
   { href: "/budgets", label: "Presupuestos", icon: PiggyBank },
   { href: "/accounts", label: "Cuentas", icon: Wallet },
   { href: "/recurring", label: "Recurrentes", icon: Repeat },
@@ -40,7 +41,7 @@ let booting = false;
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { status, error, init, reload } = useFinance();
+  const { status, error, init, reload, schemaOutdated } = useFinance();
   const router = useRouter();
   const path = usePathname();
   const openNew = useTxDialog((s) => s.openNew);
@@ -171,6 +172,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               {hidden ? <EyeOff /> : <Eye />} {hidden ? "Mostrar importes" : "Ocultar importes"}
             </Button>
           </div>
+          {schemaOutdated && (
+            <div className="mb-4 flex gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-3 text-sm">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+              <p>Hay funciones nuevas (productos y saldos) que necesitan actualizar la base de datos. Ejecuta en Supabase → SQL Editor el archivo <code className="text-xs">supabase/migrations/0002_products_balances.sql</code> y recarga.</p>
+            </div>
+          )}
           <div key={path} className="animate-in">{children}</div>
         </div>
       </main>
