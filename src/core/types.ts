@@ -140,6 +140,11 @@ export interface TransactionItem {
   /** Total de la línea (cantidad × precio; negativo para descuentos). */
   amount: number;
   sortOrder: number;
+  /**
+   * Formato del envase en esta compra, en la unidad del producto (0,5 = lata de 500 ml si se mide en litros).
+   * null = sin formato: la cantidad se apunta directamente en la unidad del producto.
+   */
+  packageSize?: number | null;
 }
 
 export interface Goal {

@@ -134,3 +134,22 @@ describe("variantes y formatos", () => {
     expect(withVariants(["ene"], [energetica, powerking, v]).sort()).toEqual(["ene", "pk", "v"]);
   });
 });
+
+describe("formatos por compra", () => {
+  it("propone primero los formatos ya usados y luego los típicos", async () => {
+    const { formatOptions, supportsPackages, usedPackageSizes } = await import("./products");
+    expect(supportsPackages("l")).toBe(true);
+    expect(supportsPackages("ud")).toBe(false);
+    // Powerking comprada en 500 ml y 750 ml (+ habitual 500 ml repetido)
+    const opts = formatOptions("l", [0.5, 0.75, 0.5, null]);
+    expect(opts.filter((o) => o.used).map((o) => o.size)).toEqual([0.5, 0.75]);
+    expect(opts.filter((o) => !o.used).map((o) => o.size)).toEqual([0.25, 0.33, 1, 1.5, 2]);
+    const a = tx({ date: "2026-11-01" }), b = tx({ date: "2026-11-05" });
+    const items = [
+      { ...item(a.id, "pk", "Powerking", 0.5, 2), packageSize: 0.5 },
+      { ...item(b.id, "pk", "Powerking", 0.75, 2), packageSize: 0.75 },
+      { ...item(b.id, "v", "V", 0.5, 3), packageSize: 0.5 },
+    ];
+    expect(usedPackageSizes("pk", items, [a, b])).toEqual([0.75, 0.5]); // el más reciente primero
+  });
+});

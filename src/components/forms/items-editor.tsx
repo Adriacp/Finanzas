@@ -1,16 +1,18 @@
 "use client";
 import { Command } from "cmdk";
 import { Check, ChevronDown, Plus, Search, ShoppingBasket, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { normalize } from "@/core/insights";
 import { parseAmount, round2 } from "@/core/money";
-import { findProductByName, formatPackage, itemsTotal, lastUnitPrice, lineTotal, productsByUsage } from "@/core/products";
+import { findProductByName, formatOptions, formatPackage, itemsTotal, lastUnitPrice, lineTotal, packageUnitsFor, productsByUsage, supportsPackages, toBaseUnit, usedPackageSizes } from "@/core/products";
 import { ProductDialog } from "./product-dialog";
 import type { Product, TransactionItem } from "@/core/types";
 import { newId } from "@/data/repository";
 import { useData, useFinance } from "@/store/finance-store";
 import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { ResponsivePicker, useIsDesktop } from "@/components/ui/overlay";
 import { useMoney } from "@/components/ui/money";
 import { cn } from "@/lib/utils";
@@ -114,6 +116,10 @@ export function ItemsEditor({ items, onChange, amount, amountManual, onSyncAmoun
   );
 }
 
+const NONE = "__none__";
+const NEW = "__new__";
+const OTHER = "__other__";
+
 function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
   item: TransactionItem;
   /** Su total se calcula solo (lo que falta del importe) */
@@ -124,13 +130,18 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
   history: ReturnType<typeof useData>;
 }) {
   const fmt = useMoney();
-  // Producto con formato (p. ej. lata de 500 ml): se apuntan envases y precio por envase,
-  // pero se guarda la cantidad en la unidad del producto (0,5 l) y el precio por esa unidad (€/l)
+  const { save, variantsSupported, itemFormatsSupported } = useFinance();
+  // Producto de la línea: puede ser el genérico («Bebida energética») o una marca suya («Powerking»)
   const product = history.products.find((p) => p.id === item.productId);
+  const root = product?.parentId ? history.products.find((p) => p.id === product.parentId) ?? product : product;
+  const brands = root ? history.products.filter((p) => p.parentId === root.id).sort((a, b) => a.name.localeCompare(b.name, "es")) : [];
   const unit = product?.unit ?? "ud";
-  const size = product?.packageSize && product.packageSize > 0 ? product.packageSize : null;
+  // Formato de esta compra (p. ej. lata de 500 ml = 0,5 l). Sin la migración 0004 se usa el habitual de la marca.
+  const size = itemFormatsSupported ? (item.packageSize && item.packageSize > 0 ? item.packageSize : null) : product?.packageSize ?? null;
   const packs = size ? item.quantity / size : item.quantity;
   const packPrice = size ? item.unitPrice * size : item.unitPrice;
+  const [askBrand, setAskBrand] = useState(false);
+  const [askFormat, setAskFormat] = useState(false);
 
   // Texto mientras se escribe; el resto del tiempo se muestran los valores calculados
   const [editing, setEditing] = useState<{ field: "q" | "p" | "t"; text: string } | null>(null);
@@ -157,26 +168,97 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
     if (field === "t") onChange({ amount: round2(v), unitPrice: item.quantity > 0 ? Math.round((v / item.quantity) * 1e4) / 1e4 : v });
   }
 
-  const pickProduct = (p: Product) => {
-    // Se mantienen los envases/unidades apuntados y se pasan al formato del nuevo producto
-    const newSize = p.packageSize && p.packageSize > 0 ? p.packageSize : null;
-    const quantity = newSize ? Math.round((packs || 1) * newSize * 1e6) / 1e6 : packs || 1;
-    // En la línea automática manda el importe; en las demás se propone el último precio pagado
-    if (isAuto) return onChange({ productId: p.id, name: p.name, quantity });
-    const last = lastUnitPrice(p.id, history.transactionItems, history.transactions);
-    const unitPrice = last ?? item.unitPrice ?? 0;
-    onChange({ productId: p.id, name: p.name, quantity, unitPrice, amount: lineTotal(quantity, unitPrice) });
+  /** Formato que se propone al elegir un producto/marca: el último usado, o su formato habitual */
+  const defaultSize = (p: Product): number | null => {
+    if (!itemFormatsSupported) return p.packageSize ?? null;
+    const last = usedPackageSizes(p.id, history.transactionItems, history.transactions)[0];
+    return last ?? p.packageSize ?? null;
   };
+
+  /** Cambiar el producto o la marca conservando cuántos envases/unidades se apuntaron */
+  function applyProduct(p: Product) {
+    const newSize = defaultSize(p);
+    const n = packs || 1;
+    const quantity = newSize ? Math.round(n * newSize * 1e6) / 1e6 : size ? item.quantity || 1 : n;
+    if (isAuto) return onChange({ productId: p.id, name: p.name, quantity, packageSize: newSize });
+    const unitPrice = lastUnitPrice(p.id, history.transactionItems, history.transactions) ?? item.unitPrice ?? 0;
+    onChange({ productId: p.id, name: p.name, quantity, packageSize: newSize, unitPrice, amount: lineTotal(quantity, unitPrice) });
+  }
+
+  /** Cambiar el formato de esta compra (se mantienen los envases y el precio por envase) */
+  function changeFormat(newSize: number | null) {
+    if (!newSize) return onChange({ packageSize: null });
+    const n = packs || 1;
+    const quantity = Math.round(n * newSize * 1e6) / 1e6;
+    if (isAuto || !packPrice) return onChange({ packageSize: newSize, quantity });
+    onChange({ packageSize: newSize, quantity, unitPrice: Math.round((packPrice / newSize) * 1e4) / 1e4, amount: round2(n * packPrice) });
+  }
+
+  async function createBrand(name: string) {
+    if (!root) return;
+    const clash = brands.find((b) => normalize(b.name) === normalize(name));
+    if (clash) { applyProduct(clash); return; }
+    const p: Product = { id: newId(), name, unit: root.unit, categoryId: root.categoryId, parentId: root.id, packageSize: null };
+    try {
+      await save("products", p);
+      toast.success(`Marca «${name}» añadida a ${root.name}`);
+      applyProduct(p);
+    } catch (e) {
+      toast.error("No se pudo crear la marca", { description: (e as Error).message });
+    }
+  }
+
+  const showBrand = !!root && variantsSupported;
+  const usedSizes = product ? [...usedPackageSizes(product.id, history.transactionItems, history.transactions), product.packageSize, root?.packageSize] : [];
+  const showFormat = !!product && itemFormatsSupported && (supportsPackages(unit) || usedSizes.some((x) => x && x > 0));
+  const formats = showFormat ? formatOptions(unit, [...usedSizes, size]) : [];
 
   return (
     <div className="rounded-xl border border-border p-2 animate-in">
       <div className="flex items-center gap-1.5">
-        <ProductPicker value={item.productId} name={item.name} onPick={pickProduct} />
+        <ProductPicker value={root?.id ?? null} name={root?.name ?? item.name} onPick={applyProduct} />
         <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Quitar ${item.name || "línea"}`} className="shrink-0 text-muted-foreground hover:text-expense"><Trash2 /></Button>
       </div>
+
+      {(showBrand || showFormat) && (
+        <div className={cn("mt-1.5 grid gap-1.5", showBrand && showFormat ? "grid-cols-2" : "grid-cols-1")}>
+          {showBrand && (
+            <label className="min-w-0">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Marca</span>
+              <Select className="h-10 md:h-10" value={product?.parentId ? product.id : NONE} aria-label="Marca"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === NEW) return setAskBrand(true);
+                  const target = v === NONE ? root : brands.find((b) => b.id === v);
+                  if (target) applyProduct(target);
+                }}>
+                <option value={NONE}>Sin marca</option>
+                {brands.map((b) => <option key={b.id} value={b.id} data-description={b.packageSize ? `habitual ${formatPackage(b.packageSize, b.unit)}` : undefined}>{b.name}</option>)}
+                <option value={NEW} data-icon="plus" data-color="#6366f1">Nueva marca…</option>
+              </Select>
+            </label>
+          )}
+          {showFormat && (
+            <label className="min-w-0">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Formato</span>
+              <Select className="h-10 md:h-10" value={size ? String(Math.round(size * 1e6) / 1e6) : NONE} aria-label="Formato"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === OTHER) return setAskFormat(true);
+                  changeFormat(v === NONE ? null : Number(v));
+                }}>
+                <option value={NONE} data-description={`apuntas la cantidad en ${unit}`}>Sin formato</option>
+                {formats.map((f) => <option key={f.size} value={String(f.size)} data-description={f.used ? "ya usado" : undefined}>{formatPackage(f.size, unit)}</option>)}
+                <option value={OTHER} data-icon="plus" data-color="#6366f1">Otro tamaño…</option>
+              </Select>
+            </label>
+          )}
+        </div>
+      )}
+
       <div className="mt-1.5 grid grid-cols-[1fr_1.2fr_1.2fr] gap-1.5">
         <label className="min-w-0">
-          <span className="mb-0.5 block truncate text-[10px] text-muted-foreground">{size ? `Envases (${formatPackage(size, unit)})` : `Cantidad (${unit})`}</span>
+          <span className="mb-0.5 block truncate text-[10px] text-muted-foreground">{size ? "Envases" : `Cantidad (${unit})`}</span>
           <input inputMode="decimal" className={inputCls} value={shown("q")} placeholder="1"
             onFocus={() => setEditing({ field: "q", text: num(packs, 3) })} onChange={(e) => onType("q", e.target.value)} onBlur={() => setEditing(null)} />
         </label>
@@ -195,10 +277,72 @@ function ItemRow({ item, isAuto, onManual, onChange, onRemove, history }: {
       </div>
       {size && item.quantity > 0 && (
         <p className="mt-1 px-0.5 text-[11px] text-muted-foreground tabular">
-          = {num(item.quantity, 3)} {unit}{item.unitPrice > 0 && <> · <b className="text-foreground">{fmt(item.unitPrice)}/{unit}</b></>}
+          {num(packs, 3)} × {formatPackage(size, unit)} = {num(item.quantity, 3)} {unit}
+          {item.unitPrice > 0 && <> · <b className="text-foreground">{fmt(item.unitPrice)}/{unit}</b></>}
         </p>
       )}
+
+      <NameDialog open={askBrand} onOpenChange={setAskBrand} title={`Nueva marca de ${root?.name ?? ""}`} placeholder="Ej. Burn"
+        hint="Se añade como marca de este producto y se compara con las demás por precio por unidad. El tamaño lo eliges en cada compra."
+        onSubmit={(name) => { setAskBrand(false); createBrand(name); }} />
+      <FormatDialog open={askFormat} onOpenChange={setAskFormat} unit={unit}
+        onSubmit={(s) => { setAskFormat(false); changeFormat(s); }} />
     </div>
+  );
+}
+
+/** Pide un nombre (p. ej. una marca nueva) en una hoja/diálogo pequeño. */
+function NameDialog({ open, onOpenChange, title, placeholder, hint, onSubmit }: {
+  open: boolean; onOpenChange: (o: boolean) => void; title: string; placeholder: string; hint: string; onSubmit: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+  useEffect(() => { if (open) setName(""); }, [open]);
+  const ok = name.trim().length > 0;
+  const submit = () => ok && onSubmit(name.trim().replace(/\s+/g, " ").slice(0, 80));
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title={title} size="sm"
+      footer={<><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button><Button onClick={submit} disabled={!ok}>Añadir</Button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-2">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder} autoFocus maxLength={80} />
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </form>
+    </Modal>
+  );
+}
+
+/** Tamaño de envase a medida (p. ej. 750 ml) para una compra concreta. */
+function FormatDialog({ open, onOpenChange, unit, onSubmit }: {
+  open: boolean; onOpenChange: (o: boolean) => void; unit: string; onSubmit: (size: number) => void;
+}) {
+  const units = packageUnitsFor(unit);
+  const [text, setText] = useState("");
+  const [u, setU] = useState(units[0].unit);
+  const touched = useRef(false);
+  useEffect(() => { if (open) { setText(""); setU(units[0].unit); touched.current = false; } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // La unidad se deduce del número mientras no se elija a mano: 750 → ml, 1,5 → l
+  useEffect(() => {
+    if (touched.current) return;
+    const v = parseAmount(text);
+    if (v === null || v <= 0) return;
+    const g = unit === "l" ? (v >= 20 ? "ml" : "l") : unit === "kg" ? (v >= 10 ? "g" : "kg") : unit === "docena" ? (v > 1 ? "ud" : "docena") : unit;
+    if (units.some((x) => x.unit === g)) setU(g);
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const v = parseAmount(text);
+  const base = v && v > 0 ? toBaseUnit(v, u, unit) : null;
+  const submit = () => base && onSubmit(base);
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title="Tamaño del envase" size="sm"
+      footer={<><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button><Button onClick={submit} disabled={!base}>Usar</Button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-2">
+        <div className="flex gap-2">
+          <Input inputMode="decimal" className="flex-1" value={text} onChange={(e) => setText(e.target.value)} placeholder={unit === "l" ? "750" : unit === "kg" ? "400" : "1"} autoFocus />
+          <Select className="w-24" value={u} onChange={(e) => { touched.current = true; setU(e.target.value); }} aria-label="Unidad del envase">
+            {units.map((x) => <option key={x.unit} value={x.unit}>{x.unit}</option>)}
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">{base ? `Cada envase = ${formatPackage(base, unit)}` : `Contenido de un envase; el precio se compara por ${unit}.`}</p>
+      </form>
+    </Modal>
   );
 }
 

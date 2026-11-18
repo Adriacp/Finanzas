@@ -255,7 +255,11 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
                       {p.merchant ?? "Sin comercio"}
                       {p.productId !== s.product.id && <span className="text-xs text-muted-foreground"> · {productName.get(p.productId)}</span>}
                     </span>
-                    <span className="text-xs text-muted-foreground tabular">{String(p.quantity).replace(".", ",")} × {fmt(p.unitPrice)}</span>
+                    <span className="text-xs text-muted-foreground tabular">
+                      {p.packageSize
+                        ? `${String(Math.round((p.quantity / p.packageSize) * 1000) / 1000).replace(".", ",")} × ${formatPackage(p.packageSize, unit)} · ${fmt(p.unitPrice * p.packageSize)}/envase`
+                        : `${String(p.quantity).replace(".", ",")} × ${fmt(p.unitPrice)}`}
+                    </span>
                     <Money value={p.amount} className="w-20 text-right font-medium" />
                   </button>
                 );

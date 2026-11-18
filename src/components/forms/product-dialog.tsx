@@ -187,9 +187,9 @@ function ProductForm({ initial, defaultName, defaultParentId, onClose, onSaved, 
       )}
 
       {variantsSupported && (
-        <Field label="Formato del envase (opcional)" error={errors.packageSize}
-          hint={pkgBase ? `Cada envase = ${formatPackage(pkgBase, baseUnit)}. En el desglose apuntarás envases y se calculará el precio por ${baseUnit}.`
-            : "Ej. 500 ml para una lata. Así en el desglose basta con poner cuántos envases compras."}>
+        <Field label="Formato habitual (opcional)" error={errors.packageSize}
+          hint={pkgBase ? `Cada envase = ${formatPackage(pkgBase, baseUnit)}. Se propondrá al comprarlo, pero en cada compra puedes elegir otro tamaño.`
+            : "Ej. 500 ml. Es solo una sugerencia: en cada compra eliges el tamaño (la misma marca puede venir en 500 ml o 750 ml)."}>
           <div className="flex gap-2">
             <Input inputMode="decimal" className="flex-1" placeholder={baseUnit === "l" ? "500" : baseUnit === "kg" ? "250" : "1"} value={pkg.text}
               onChange={(e) => setPkg({ ...pkg, text: e.target.value })} />

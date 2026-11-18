@@ -48,7 +48,7 @@ function check<T>(res: { data: T; error: { message: string } | null }): T {
 const isMissingSchema = (msg: string) => /schema cache|does not exist|PGRST20[45]/i.test(msg);
 
 function translate(msg: string): string {
-  if (isMissingSchema(msg)) return "Falta actualizar la base de datos: ejecuta en Supabase las migraciones pendientes de la carpeta supabase/migrations (0002 y 0003).";
+  if (isMissingSchema(msg)) return "Falta actualizar la base de datos: ejecuta en Supabase las migraciones pendientes de la carpeta supabase/migrations (0002, 0003 y 0004).";
   if (/JWT|not authenticated|401/i.test(msg)) return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (/violates row-level security/i.test(msg)) return "No tienes permiso para realizar esta acción.";
   if (/duplicate key/i.test(msg)) return "Ya existe un registro igual.";
@@ -63,6 +63,8 @@ export class SupabaseRepository implements FinanceRepository {
   schemaOutdated = false;
   /** false si falta la migración 0003 (variantes y formatos de producto) */
   variantsSupported = true;
+  /** false si falta la migración 0004 (formato del envase en cada compra) */
+  itemFormatsSupported = true;
   constructor(private sb: SupabaseClient, private userId: string) {}
 
   private async selectAll<K extends EntityKey>(entity: K): Promise<EntityMap[K][]> {
@@ -93,6 +95,9 @@ export class SupabaseRepository implements FinanceRepository {
     if (!this.schemaOutdated) {
       const probe = await this.sb.from("products").select("parent_id,package_size").limit(1);
       if (probe.error && isMissingSchema(probe.error.message)) { this.variantsSupported = false; this.schemaOutdated = true; }
+      // ¿Formato por compra en las líneas (migración 0004)?
+      const probeItems = await this.sb.from("transaction_items").select("package_size").limit(1);
+      if (probeItems.error && isMissingSchema(probeItems.error.message)) { this.itemFormatsSupported = false; this.schemaOutdated = true; }
     }
     return { profile: fromRow<Profile>(profileRow as Record<string, unknown>), ...byKey };
   }
@@ -101,6 +106,7 @@ export class SupabaseRepository implements FinanceRepository {
   private dbRow<K extends EntityKey>(entity: K, row: EntityMap[K]): Record<string, unknown> {
     const out: Record<string, unknown> = { ...toRow(row), user_id: this.userId };
     if (entity === "products" && !this.variantsSupported) { delete out.parent_id; delete out.package_size; }
+    if (entity === "transactionItems" && !this.itemFormatsSupported) delete out.package_size;
     return out;
   }
 

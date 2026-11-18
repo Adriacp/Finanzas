@@ -84,10 +84,11 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
     if (rnd() > 0.6) {
       const [brand, canPrice] = ENERGY[Math.floor(rnd() * ENERGY.length)];
       const cans = rnd() > 0.7 ? 2 : 1;
-      const size = brand.packageSize!;
+      // La misma marca puede venir en varios tamaños: Powerking de 1 l o de 500 ml
+      const size = brand.name === "Powerking" && rnd() > 0.5 ? 0.5 : brand.packageSize!;
       const unitPrice = Math.round(((canPrice * PRICE_FACTOR[shop] * between(0.97, 1.03)) / size) * 1e4) / 1e4;
       const quantity = round2(cans * size);
-      items.push({ id: newId(), transactionId: txId, productId: brand.id, name: brand.name, quantity, unitPrice, amount: round2(quantity * unitPrice), sortOrder: items.length });
+      items.push({ id: newId(), transactionId: txId, productId: brand.id, name: brand.name, quantity, unitPrice, amount: round2(quantity * unitPrice), sortOrder: items.length, packageSize: size });
     }
     // 3 de cada 4 compras llevan desglose; el resto solo el total (el desglose es opcional)
     const withItems = rnd() > 0.25;

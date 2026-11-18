@@ -41,6 +41,8 @@ export interface FinanceRepository {
   readonly schemaOutdated?: boolean;
   /** false si la BD aún no admite variantes/formatos de producto (migración 0003). */
   readonly variantsSupported?: boolean;
+  /** false si la BD aún no guarda el formato del envase de cada compra (migración 0004). */
+  readonly itemFormatsSupported?: boolean;
   uploadAttachment(file: File): Promise<string>;
   attachmentUrl(path: string): Promise<string>;
   removeAttachment(path: string): Promise<void>;

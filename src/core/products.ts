@@ -22,6 +22,8 @@ export interface ProductPurchase {
   transactionId: ID;
   /** Producto exacto de la línea (la variante, si la hay) */
   productId: ID;
+  /** Formato del envase en esa compra (en la unidad del producto), si se indicó */
+  packageSize: number | null;
   date: ISODate;
   merchant: string | null;
   quantity: number;
@@ -84,7 +86,7 @@ export function productStats(products: Product[], items: TransactionItem[], txs:
     const t = txById.get(it.transactionId);
     if (!t || t.type !== "expense" || !isEffective(t)) continue;
     if (range && !inRange(t.date, range)) continue;
-    const p: ProductPurchase = { itemId: it.id, transactionId: t.id, productId: it.productId, date: t.date, merchant: t.merchant, quantity: it.quantity, unitPrice: it.unitPrice, amount: it.amount };
+    const p: ProductPurchase = { itemId: it.id, transactionId: t.id, productId: it.productId, packageSize: it.packageSize ?? null, date: t.date, merchant: t.merchant, quantity: it.quantity, unitPrice: it.unitPrice, amount: it.amount };
     (byProduct.get(it.productId) ?? byProduct.set(it.productId, []).get(it.productId)!).push(p);
   }
 
@@ -202,6 +204,39 @@ export function formatPackage(size: number, baseUnit: string): string {
   if (baseUnit === "kg" && size < 1) return `${fmt(size * 1000)} g`;
   if (baseUnit === "docena" && size < 1) return `${fmt(size * 12)} ud`;
   return `${fmt(size)} ${baseUnit}`;
+}
+
+/** Tamaños de envase típicos para proponer según la unidad del producto (en esa unidad). */
+const COMMON_PACKAGES: Record<string, number[]> = {
+  l: [0.25, 0.33, 0.5, 0.75, 1, 1.5, 2],
+  kg: [0.25, 0.5, 1],
+  docena: [0.5, 1],
+};
+
+/** ¿Tiene sentido elegir formato de envase para esta unidad? (litros, kilos, docenas) */
+export const supportsPackages = (unit: string) => unit in COMMON_PACKAGES;
+
+/**
+ * Formatos a ofrecer en una línea: primero los ya usados con esa marca/producto (y su formato habitual),
+ * después los típicos de la unidad. Sin duplicados y ordenados de menor a mayor dentro de cada grupo.
+ */
+export function formatOptions(unit: string, used: Array<number | null | undefined>): { size: number; used: boolean }[] {
+  const seen = new Set<number>();
+  const norm = (n: number) => Math.round(n * 1e6) / 1e6;
+  const usedSizes = [...new Set(used.filter((x): x is number => !!x && x > 0).map(norm))].sort((a, b) => a - b);
+  const out: { size: number; used: boolean }[] = [];
+  for (const s of usedSizes) { seen.add(s); out.push({ size: s, used: true }); }
+  for (const s of COMMON_PACKAGES[unit] ?? []) if (!seen.has(norm(s))) out.push({ size: norm(s), used: false });
+  return out;
+}
+
+/** Formatos con los que se ha comprado un producto (el más reciente primero). */
+export function usedPackageSizes(productId: ID, items: TransactionItem[], txs: Transaction[]): number[] {
+  const dateOf = new Map(txs.map((t) => [t.id, t.date]));
+  return items
+    .filter((i) => i.productId === productId && i.packageSize && i.packageSize > 0)
+    .sort((a, b) => ((dateOf.get(b.transactionId) ?? "") < (dateOf.get(a.transactionId) ?? "") ? -1 : 1))
+    .map((i) => i.packageSize!);
 }
 
 /** Unidad sugerida por el nombre del producto (el usuario siempre puede cambiarla). */
