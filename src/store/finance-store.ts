@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { budgetStatuses, crossedThresholds, type BudgetStatus } from "@/core/budgets";
 import { monthKey, todayISO } from "@/core/dates";
+import { planDedupe } from "@/core/dedupe";
 import { buildDefaultAccounts, buildDefaultCategories } from "@/core/defaults";
 import type { FinanceData, Profile, Transaction } from "@/core/types";
 import { newId, type EntityKey, type EntityMap, type FinanceRepository } from "@/data/repository";
@@ -52,13 +53,36 @@ export const useFinance = create<FinanceState>((set, get) => {
 
   async function seedIfNeeded(r: FinanceRepository, data: FinanceData): Promise<FinanceData> {
     if (data.profile.seeded) return data;
-    if (data.categories.length === 0) {
-      const cats = buildDefaultCategories(newId);
-      await r.insertMany("categories", cats.filter((c) => !c.parentId));
-      await r.insertMany("categories", cats.filter((c) => c.parentId));
+    // Solo quien "reclama" la siembra crea los datos iniciales (otra pestaña/dispositivo no).
+    if (!(await r.claimSeed())) return r.loadAll();
+    try {
+      if (data.categories.length === 0) {
+        const cats = buildDefaultCategories(newId);
+        await r.insertMany("categories", cats.filter((c) => !c.parentId));
+        await r.insertMany("categories", cats.filter((c) => c.parentId));
+      }
+      if (data.accounts.length === 0) await r.insertMany("accounts", buildDefaultAccounts(newId, data.profile.currency));
+    } catch (e) {
+      await r.updateProfile({ seeded: false }).catch(() => {});
+      throw e;
     }
-    if (data.accounts.length === 0) await r.insertMany("accounts", buildDefaultAccounts(newId, data.profile.currency));
-    await r.updateProfile({ seeded: true });
+    return r.loadAll();
+  }
+
+  /** Fusiona categorías/cuentas duplicadas (p. ej. por una siembra doble) sin perder movimientos. */
+  async function repairDuplicates(r: FinanceRepository, data: FinanceData): Promise<FinanceData> {
+    const plan = planDedupe(data);
+    if (!plan.hasChanges) return data;
+    if (plan.categoryUpdates.length) await r.insertMany("categories", plan.categoryUpdates);
+    if (plan.transactionUpdates.length) await r.insertMany("transactions", plan.transactionUpdates);
+    if (plan.recurringUpdates.length) await r.insertMany("recurring", plan.recurringUpdates);
+    if (plan.goalUpdates.length) await r.insertMany("goals", plan.goalUpdates);
+    if (plan.budgetDeletes.length) await r.removeMany("budgets", plan.budgetDeletes);
+    if (plan.budgetUpdates.length) await r.insertMany("budgets", plan.budgetUpdates);
+    if (plan.transactionDeletes.length) await r.removeMany("transactions", plan.transactionDeletes);
+    if (plan.subcategoryDeletes.length) await r.removeMany("categories", plan.subcategoryDeletes);
+    if (plan.categoryDeletes.length) await r.removeMany("categories", plan.categoryDeletes);
+    if (plan.accountDeletes.length) await r.removeMany("accounts", plan.accountDeletes);
     return r.loadAll();
   }
 
@@ -71,7 +95,13 @@ export const useFinance = create<FinanceState>((set, get) => {
     async init(r) {
       set({ repo: r, status: "loading", error: null });
       try {
-        const data = await seedIfNeeded(r, await r.loadAll());
+        let data = await seedIfNeeded(r, await r.loadAll());
+        try {
+          data = await repairDuplicates(r, data);
+        } catch {
+          // Si la reparación falla, se sigue con los datos tal cual (se reintentará en el próximo arranque).
+          data = await r.loadAll();
+        }
         set({ data, status: "ready" });
       } catch (e) {
         set({ status: "error", error: errMsg(e) });

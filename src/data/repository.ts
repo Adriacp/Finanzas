@@ -24,6 +24,12 @@ export interface FinanceRepository {
   remove<K extends EntityKey>(entity: K, id: string): Promise<void>;
   removeMany<K extends EntityKey>(entity: K, ids: string[]): Promise<void>;
   updateProfile(patch: Partial<Omit<Profile, "id">>): Promise<Profile>;
+  /**
+   * Marca de forma atómica que los datos iniciales se van a crear.
+   * Devuelve true solo a quien la marca primero (evita sembrar dos veces si
+   * se abren dos pestañas o dispositivos a la vez).
+   */
+  claimSeed(): Promise<boolean>;
   uploadAttachment(file: File): Promise<string>;
   attachmentUrl(path: string): Promise<string>;
   removeAttachment(path: string): Promise<void>;

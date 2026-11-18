@@ -102,6 +102,12 @@ export class SupabaseRepository implements FinanceRepository {
     return fromRow<Profile>(data as Record<string, unknown>);
   }
 
+  async claimSeed(): Promise<boolean> {
+    // UPDATE ... WHERE seeded = false es atómico en PostgreSQL: solo una petición lo consigue.
+    const data = check(await this.sb.from("profiles").update({ seeded: true }).eq("id", this.userId).eq("seeded", false).select("id"));
+    return Array.isArray(data) && data.length > 0;
+  }
+
   async uploadAttachment(file: File): Promise<string> {
     if (file.size > 10 * 1024 * 1024) throw new RepoError("El archivo supera el máximo de 10 MB.");
     const ext = (file.name.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");

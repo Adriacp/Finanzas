@@ -1,7 +1,7 @@
 "use client";
 import { X } from "lucide-react";
 import { useId, useState, type KeyboardEvent } from "react";
-import { CATEGORY_ICONS, PALETTE } from "@/core/defaults";
+import { ACCOUNT_TYPE_LABELS, CATEGORY_ICONS, PALETTE, PAYMENT_METHOD_ICONS, PAYMENT_METHODS } from "@/core/defaults";
 import type { Account, Category, CategoryKind } from "@/core/types";
 import { Icon } from "@/components/ui/icon";
 import { Input, Select } from "@/components/ui/input";
@@ -21,11 +21,11 @@ export function CategorySelect({ categories, kind, value, onChange, placeholder 
       {includeAll
         ? parents.map((p) => (
             <optgroup key={p.id} label={p.name}>
-              <option value={p.id}>{p.name} (toda)</option>
-              {sortCats(categories.filter((c) => c.parentId === p.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <option value={p.id} data-icon={p.icon} data-color={p.color}>{p.name} (toda)</option>
+              {sortCats(categories.filter((c) => c.parentId === p.id)).map((s) => <option key={s.id} value={s.id} data-icon={s.icon} data-color={s.color}>{s.name}</option>)}
             </optgroup>
           ))
-        : parents.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        : parents.map((p) => <option key={p.id} value={p.id} data-icon={p.icon} data-color={p.color} data-description={p.description ?? undefined}>{p.name}</option>)}
     </Select>
   );
 }
@@ -37,7 +37,7 @@ export function SubcategorySelect({ categories, parentId, value, onChange, id }:
   return (
     <Select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} disabled={!parentId || subs.length === 0}>
       <option value="">{parentId ? "Sin subcategoría" : "Elige categoría"}</option>
-      {subs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      {subs.map((s) => <option key={s.id} value={s.id} data-icon={s.icon} data-color={s.color}>{s.name}</option>)}
     </Select>
   );
 }
@@ -49,8 +49,18 @@ export function AccountSelect({ accounts, value, onChange, placeholder = "Sin cu
     <Select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
       <option value="">{placeholder}</option>
       {accounts.filter((a) => (!a.archived || a.id === value) && a.id !== exclude).sort((a, b) => a.sortOrder - b.sortOrder).map((a) => (
-        <option key={a.id} value={a.id}>{a.name}</option>
+        <option key={a.id} value={a.id} data-icon={a.icon} data-color={a.color} data-description={[ACCOUNT_TYPE_LABELS[a.type], a.institution].filter(Boolean).join(" · ")}>{a.name}</option>
       ))}
+    </Select>
+  );
+}
+
+/** Forma de pago con icono propio para cada método. */
+export function PaymentMethodSelect({ value, onChange, id }: { value: string | null; onChange: (v: string | null) => void; id?: string }) {
+  return (
+    <Select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
+      <option value="">Sin indicar</option>
+      {PAYMENT_METHODS.map((m) => <option key={m} value={m} data-icon={PAYMENT_METHOD_ICONS[m] ?? "wallet"} data-color="#64748b">{m}</option>)}
     </Select>
   );
 }

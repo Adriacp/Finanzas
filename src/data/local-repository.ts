@@ -93,6 +93,14 @@ export class LocalRepository implements FinanceRepository {
     return { ...this.data.profile };
   }
 
+  async claimSeed(): Promise<boolean> {
+    this.data = this.read();
+    if (this.data.profile.seeded) return false;
+    this.data.profile.seeded = true;
+    this.write();
+    return true;
+  }
+
   private files(): Record<string, string> {
     try { return JSON.parse(localStorage.getItem(FILES_KEY) ?? "{}"); } catch { return {}; }
   }

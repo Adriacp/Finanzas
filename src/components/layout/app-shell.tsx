@@ -34,6 +34,9 @@ export const NAV = [
 
 const MOBILE_TABS = [NAV[0], NAV[1], null, NAV[2]] as const;
 
+/** Evita arrancar la carga de datos dos veces en paralelo. */
+let booting = false;
+
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -47,27 +50,37 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const lastSync = useRef(Date.now());
 
-  // Arranque: elegir repositorio (Supabase o demo local) y cargar datos
+  // Arranque: elegir repositorio (Supabase o demo local) y cargar datos.
+  // `booting` se marca ANTES de cualquier espera: React puede ejecutar este efecto
+  // dos veces seguidas (modo estricto) y no debe arrancar (ni sembrar datos) dos veces.
   useEffect(() => {
-    if (useFinance.getState().status !== "idle") return;
     if (isSupabaseConfigured) {
       const sb = getSupabase();
+      const shouldBoot = !booting && useFinance.getState().status === "idle";
+      if (shouldBoot) booting = true;
       sb.auth.getUser().then(({ data }) => {
-        if (!data.user) return router.replace("/login");
+        if (!data.user) { booting = false; return router.replace("/login"); }
         setEmail(data.user.email ?? null);
-        init(new SupabaseRepository(sb, data.user.id));
+        if (shouldBoot) init(new SupabaseRepository(sb, data.user.id));
       });
-      const { data: sub } = sb.auth.onAuthStateChange((event) => {
-        if (event === "SIGNED_OUT") {
-          useFinance.getState().reset();
-          router.replace("/login");
-        }
-      });
-      return () => sub.subscription.unsubscribe();
-    } else if (isDemoMode) {
+    } else if (isDemoMode && !booting && useFinance.getState().status === "idle") {
+      booting = true;
       init(new LocalRepository());
     }
   }, [init, router]);
+
+  // Cierre de sesión (en esta u otra pestaña)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        booting = false;
+        useFinance.getState().reset();
+        router.replace("/login");
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [router]);
 
   // Sincronización entre dispositivos: recargar al volver a la app
   useEffect(() => {

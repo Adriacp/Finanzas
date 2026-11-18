@@ -82,6 +82,18 @@ export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
 
 export const PAYMENT_METHODS = ["Tarjeta", "Efectivo", "Transferencia", "Bizum", "Domiciliación", "PayPal", "Apple Pay", "Google Pay", "Otro"];
 
+export const PAYMENT_METHOD_ICONS: Record<string, string> = {
+  Tarjeta: "credit-card",
+  Efectivo: "banknote",
+  Transferencia: "arrow-left-right",
+  Bizum: "smartphone",
+  Domiciliación: "landmark",
+  PayPal: "wallet",
+  "Apple Pay": "smartphone",
+  "Google Pay": "smartphone",
+  Otro: "circle-ellipsis",
+};
+
 export const PALETTE = ["#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#0ea5e9", "#3b82f6", "#64748b", "#a16207", "#94a3b8"];
 
 export const CATEGORY_ICONS = [

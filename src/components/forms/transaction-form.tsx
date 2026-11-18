@@ -3,7 +3,6 @@ import { ChevronDown, Copy, Paperclip, Sparkles, Trash2, TriangleAlert, X } from
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatDate, todayISO } from "@/core/dates";
-import { PAYMENT_METHODS } from "@/core/defaults";
 import { allTags, findDuplicates, merchantSuggestions, suggestCategory } from "@/core/insights";
 import { parseAmount } from "@/core/money";
 import type { Transaction, TxStatus, TxType } from "@/core/types";
@@ -12,11 +11,11 @@ import { newId } from "@/data/repository";
 import { useFinance } from "@/store/finance-store";
 import { useTxDialog } from "@/store/ui-store";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { Segmented, Switch } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useMoney } from "@/components/ui/money";
-import { AccountSelect, CategorySelect, SubcategorySelect, TagInput } from "./pickers";
+import { AccountSelect, CategorySelect, PaymentMethodSelect, SubcategorySelect, TagInput } from "./pickers";
 import { cn } from "@/lib/utils";
 
 const TYPE_OPTIONS: { value: TxType; label: string }[] = [
@@ -240,10 +239,7 @@ function TransactionForm() {
               <datalist id="merchants">{merchants.map((m) => <option key={m} value={m} />)}</datalist>
             </Field>
             <Field label="Método de pago">
-              <Select value={tx.paymentMethod ?? ""} onChange={(e) => set("paymentMethod", e.target.value || null)}>
-                <option value="">—</option>
-                {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-              </Select>
+              <PaymentMethodSelect value={tx.paymentMethod} onChange={(v) => set("paymentMethod", v)} />
             </Field>
           </div>
           <Field label="Etiquetas"><TagInput value={tx.tags} onChange={(v) => set("tags", v)} suggestions={tags} /></Field>
