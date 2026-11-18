@@ -19,6 +19,7 @@ import { Modal } from "@/components/ui/modal";
 import { Money, useMoney } from "@/components/ui/money";
 import { AccountSelect, ColorPicker, IconPicker } from "@/components/forms/pickers";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-time";
 
 export default function GoalsPage() {
   const d = useData();
@@ -167,7 +168,7 @@ function GoalForm({ initial, onClose }: { initial: Goal | null; onClose: () => v
       <div className="grid grid-cols-2 gap-3">
         <Field label="Cantidad objetivo" error={errors.targetAmount}><Input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="5.000" /></Field>
         <Field label="Ya ahorrado" error={errors.savedAmount}><Input inputMode="decimal" value={saved} onChange={(e) => setSaved(e.target.value)} /></Field>
-        <Field label="Fecha límite"><Input type="date" value={g.deadline ?? ""} onChange={(e) => setG({ ...g, deadline: e.target.value || null })} /></Field>
+        <Field label="Fecha límite"><DatePicker value={g.deadline} onChange={(v) => setG({ ...g, deadline: v })} allowClear placeholder="Sin fecha límite" /></Field>
         <Field label="Cuenta asociada"><AccountSelect accounts={d.accounts} value={g.accountId} onChange={(v) => setG({ ...g, accountId: v })} placeholder="Ninguna" /></Field>
       </div>
       {preview.monthlyNeeded !== null && preview.monthlyNeeded > 0 && (

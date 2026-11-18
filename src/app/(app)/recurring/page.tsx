@@ -19,6 +19,7 @@ import { Modal } from "@/components/ui/modal";
 import { Money, useMoney } from "@/components/ui/money";
 import { AccountSelect, CategorySelect, SubcategorySelect } from "@/components/forms/pickers";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-time";
 
 const USAGE_LABELS = { high: "Lo uso mucho", medium: "Lo uso a veces", low: "Apenas lo uso" } as const;
 
@@ -194,9 +195,9 @@ function RecurringForm({ initial, onClose, onPay }: { initial: Recurring | null;
             {(Object.keys(FREQUENCY_LABELS) as Frequency[]).map((f) => <option key={f} value={f}>{FREQUENCY_LABELS[f]}</option>)}
           </Select>
         </Field>
-        <Field label="Próximo cobro" error={errors.nextDate}><Input type="date" value={r.nextDate} onChange={(e) => setR({ ...r, nextDate: e.target.value })} /></Field>
-        <Field label="Fecha de inicio" error={errors.startDate}><Input type="date" value={r.startDate} onChange={(e) => setR({ ...r, startDate: e.target.value })} /></Field>
-        <Field label="Fecha de fin (opcional)" error={errors.endDate}><Input type="date" value={r.endDate ?? ""} onChange={(e) => setR({ ...r, endDate: e.target.value || null })} /></Field>
+        <Field label="Próximo cobro" error={errors.nextDate}><DatePicker value={r.nextDate} onChange={(v) => v && setR({ ...r, nextDate: v })} aria-invalid={!!errors.nextDate} /></Field>
+        <Field label="Fecha de inicio" error={errors.startDate}><DatePicker value={r.startDate} onChange={(v) => v && setR({ ...r, startDate: v })} aria-invalid={!!errors.startDate} /></Field>
+        <Field label="Fecha de fin (opcional)" error={errors.endDate}><DatePicker value={r.endDate} onChange={(v) => setR({ ...r, endDate: v })} allowClear placeholder="Sin fecha de fin" min={r.startDate} aria-invalid={!!errors.endDate} /></Field>
         <Field label="Cuenta"><AccountSelect accounts={d.accounts} value={r.accountId} onChange={(v) => setR({ ...r, accountId: v })} /></Field>
         <Field label="Categoría"><CategorySelect categories={d.categories} kind={r.type} value={r.categoryId} onChange={(v) => setR({ ...r, categoryId: v, subcategoryId: null })} /></Field>
         <Field label="Subcategoría"><SubcategorySelect categories={d.categories} parentId={r.categoryId} value={r.subcategoryId} onChange={(v) => setR({ ...r, subcategoryId: v })} /></Field>

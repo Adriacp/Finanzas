@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/ui/misc";
 import { Money } from "@/components/ui/money";
 import { AccountSelect, CategorySelect } from "@/components/forms/pickers";
 import { exportBackup, exportCSV, exportExcel, exportPDF, parseBackup } from "@/lib/exporters";
+import { DatePicker } from "@/components/ui/date-time";
 
 export default function ReportsPage() {
   const d = useData();
@@ -88,8 +89,8 @@ export default function ReportsPage() {
             </Field>
             {period === "custom" && (
               <>
-                <Field label="Desde"><Input type="date" value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} /></Field>
-                <Field label="Hasta"><Input type="date" value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} /></Field>
+                <Field label="Desde"><DatePicker value={custom.from} onChange={(v) => v && setCustom({ ...custom, from: v })} /></Field>
+                <Field label="Hasta"><DatePicker value={custom.to} onChange={(v) => v && setCustom({ ...custom, to: v })} /></Field>
               </>
             )}
           </div>

@@ -19,6 +19,7 @@ import { GroupedTransactions } from "@/components/shared";
 import { AccountSelect, CategorySelect, SubcategorySelect } from "@/components/forms/pickers";
 import { CsvImportDialog } from "@/components/forms/csv-import";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-time";
 
 const TYPE_LABELS: Record<TxType, string> = { expense: "Gastos", income: "Ingresos", transfer: "Transferencias", refund: "Reembolsos" };
 const STATUS_LABELS: Record<TxStatus, string> = { paid: "Pagado", pending: "Pendiente", scheduled: "Programado" };
@@ -188,8 +189,8 @@ function FiltersDialog({ open, onOpenChange, value, onChange }: { open: boolean;
           <AccountSelect accounts={d.accounts} value={f.accountIds?.[0] ?? null} placeholder="Todas" onChange={(v) => setF({ ...f, accountIds: v ? [v] : undefined })} />
         </Field>
         <Field label="Comercio"><Input value={f.merchant ?? ""} onChange={(e) => setF({ ...f, merchant: e.target.value || undefined })} /></Field>
-        <Field label="Desde"><Input type="date" value={f.from ?? ""} onChange={(e) => setF({ ...f, from: e.target.value || undefined })} /></Field>
-        <Field label="Hasta"><Input type="date" value={f.to ?? ""} onChange={(e) => setF({ ...f, to: e.target.value || undefined })} /></Field>
+        <Field label="Desde"><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v ?? undefined })} allowClear placeholder="Cualquiera" /></Field>
+        <Field label="Hasta"><DatePicker value={f.to} onChange={(v) => setF({ ...f, to: v ?? undefined })} allowClear placeholder="Cualquiera" /></Field>
         <Field label="Importe mínimo"><Input inputMode="decimal" value={f.minAmount ?? ""} onChange={(e) => setF({ ...f, minAmount: num(e.target.value) })} /></Field>
         <Field label="Importe máximo"><Input inputMode="decimal" value={f.maxAmount ?? ""} onChange={(e) => setF({ ...f, maxAmount: num(e.target.value) })} /></Field>
         <Field label="Fijo / variable">

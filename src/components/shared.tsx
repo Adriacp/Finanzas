@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { Money, useMoney } from "@/components/ui/money";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-time";
 
 // ---------------------------------------------------------------------------
 // Selector de periodo (compartido entre Inicio y Análisis)
@@ -55,8 +56,8 @@ export function PeriodPicker({ className }: { className?: string }) {
         footer={<><Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
           <Button disabled={!draft.from || !draft.to || draft.from > draft.to} onClick={() => { set("custom", draft); setOpen(false); }}>Aplicar</Button></>}>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Desde"><Input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} /></Field>
-          <Field label="Hasta"><Input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></Field>
+          <Field label="Desde"><DatePicker value={draft.from} onChange={(v) => v && setDraft({ ...draft, from: v })} /></Field>
+          <Field label="Hasta"><DatePicker value={draft.to} onChange={(v) => v && setDraft({ ...draft, to: v })} /></Field>
         </div>
         {draft.from > draft.to && <p className="mt-2 text-xs text-expense">La fecha inicial debe ser anterior a la final.</p>}
       </Modal>

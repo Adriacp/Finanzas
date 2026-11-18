@@ -10,6 +10,7 @@ import { normalize } from "@/core/insights";
 import { cn } from "@/lib/utils";
 import { IconBadge } from "./icon";
 import { Modal } from "./modal";
+import { useIsDesktop } from "./overlay";
 
 /** El componente Field comparte su etiqueta para usarla como título de la hoja en el móvil. */
 export const FieldLabelContext = createContext<ReactNode>(null);
@@ -50,18 +51,6 @@ function readOptions(children: ReactNode, group?: string, out: Opt[] = []): Opt[
     }
   });
   return out;
-}
-
-function useIsDesktop() {
-  const [desktop, setDesktop] = useState(true);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const update = () => setDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return desktop;
 }
 
 const trigger =

@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/modal";
 import { useMoney } from "@/components/ui/money";
 import { AccountSelect, CategorySelect, PaymentMethodSelect, SubcategorySelect, TagInput } from "./pickers";
 import { cn } from "@/lib/utils";
+import { DatePicker, TimePicker } from "@/components/ui/date-time";
 
 const TYPE_OPTIONS: { value: TxType; label: string }[] = [
   { value: "expense", label: "Gasto" },
@@ -207,8 +208,8 @@ function TransactionForm() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Fecha" error={errors.date}><Input type="date" value={tx.date} onChange={(e) => set("date", e.target.value)} required /></Field>
-        <Field label="Hora"><Input type="time" value={tx.time ?? ""} onChange={(e) => set("time", e.target.value || null)} /></Field>
+        <Field label="Fecha" error={errors.date}><DatePicker value={tx.date} onChange={(v) => v && set("date", v)} showYesterday aria-invalid={!!errors.date} /></Field>
+        <Field label="Hora"><TimePicker value={tx.time} onChange={(v) => set("time", v)} allowClear /></Field>
       </div>
 
       <Field label="Estado">
