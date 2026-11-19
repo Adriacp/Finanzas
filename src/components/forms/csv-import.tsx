@@ -16,7 +16,7 @@ import { Money } from "@/components/ui/money";
 import { AccountSelect } from "./pickers";
 
 const FIELD_LABELS: Record<keyof CsvMapping, string> = {
-  date: "Fecha", concept: "Concepto", amount: "Importe (con signo)", debit: "Cargo (gasto)", credit: "Abono (ingreso)", merchant: "Comercio",
+  date: "Fecha", concept: "Concepto", amount: "Importe (con signo)", debit: "Cargo (gasto)", credit: "Abono (ingreso)", merchant: "Comercio / origen",
 };
 
 /** Importación de extractos bancarios en CSV con detección de columnas, categorías y duplicados. */

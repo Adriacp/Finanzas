@@ -40,7 +40,7 @@ const HINTS: Record<keyof CsvMapping, RegExp> = {
   amount: /^(importe|cantidad|amount|importe eur|importe \(eur\)|valor)$/,
   debit: /(cargo|debe|gasto|debit|salida)/,
   credit: /(abono|haber|ingreso|credit|entrada)/,
-  merchant: /(comercio|establecimiento|beneficiario|merchant|payee)/,
+  merchant: /(comercio|establecimiento|beneficiario|ordenante|remitente|origen|merchant|payee)/,
 };
 
 /** Busca la fila de cabecera (primeras 15) y adivina el mapeo de columnas. */

@@ -29,7 +29,7 @@ function rows({ data, txs }: ReportInput) {
     Subcategoría: cat.get(t.subcategoryId ?? "") ?? "",
     Cuenta: acc.get(t.accountId ?? "") ?? "",
     "Cuenta destino": acc.get(t.toAccountId ?? "") ?? "",
-    Comercio: t.merchant ?? "",
+    "Comercio / origen": t.merchant ?? "",
     "Método de pago": t.paymentMethod ?? "",
     Estado: STATUS[t.status],
     Etiquetas: t.tags.join(", "),
@@ -39,7 +39,7 @@ function rows({ data, txs }: ReportInput) {
   }));
 }
 
-const HEADERS = ["Fecha","Hora","Tipo","Concepto","Importe","Categoría","Subcategoría","Cuenta","Cuenta destino","Comercio","Método de pago","Estado","Etiquetas","Fijo","Descripción","Notas"];
+const HEADERS = ["Fecha","Hora","Tipo","Concepto","Importe","Categoría","Subcategoría","Cuenta","Cuenta destino","Comercio / origen","Método de pago","Estado","Etiquetas","Fijo","Descripción","Notas"];
 
 const fileBase = (r: DateRange) => `finanzas_${r.from}_${r.to}`;
 

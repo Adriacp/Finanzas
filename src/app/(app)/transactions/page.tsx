@@ -207,7 +207,7 @@ function FiltersDialog({ open, onOpenChange, value, onChange }: { open: boolean;
             })}
           </Select>
         </Field>
-        <Field label="Comercio"><Input value={f.merchant ?? ""} onChange={(e) => setF({ ...f, merchant: e.target.value || undefined })} /></Field>
+        <Field label="Comercio / origen"><Input value={f.merchant ?? ""} onChange={(e) => setF({ ...f, merchant: e.target.value || undefined })} /></Field>
         <Field label="Desde"><DatePicker value={f.from} onChange={(v) => setF({ ...f, from: v ?? undefined })} allowClear placeholder="Cualquiera" /></Field>
         <Field label="Hasta"><DatePicker value={f.to} onChange={(v) => setF({ ...f, to: v ?? undefined })} allowClear placeholder="Cualquiera" /></Field>
         <Field label="Importe mínimo"><Input inputMode="decimal" value={f.minAmount ?? ""} onChange={(e) => setF({ ...f, minAmount: num(e.target.value) })} /></Field>

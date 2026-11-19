@@ -1,6 +1,6 @@
 "use client";
 import { Command } from "cmdk";
-import { Check, ChevronDown, Plus, Search, Store, X } from "lucide-react";
+import { Building2, Check, ChevronDown, Plus, Search, Store, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { merchantDirectory, normalize, type MerchantEntry } from "@/core/insights";
 import { useData } from "@/store/finance-store";
@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
  * Selector de comercio: lista los comercios que ya has usado (agrupando variantes como «Spar» y «spar »),
  * con buscador y opción de usar uno nuevo. Al elegir uno se informa de su categoría habitual.
  */
-export function MerchantPicker({ value, onChange, id }: {
+export function MerchantPicker({ value, onChange, id, kind = "expense" }: {
   value: string | null;
+  /** «income»: el campo se llama «Origen» y solo sugiere orígenes de ingresos anteriores */
+  kind?: "expense" | "income";
   onChange: (name: string | null, entry: MerchantEntry | null) => void;
   id?: string;
 }) {
@@ -20,7 +22,7 @@ export function MerchantPicker({ value, onChange, id }: {
   const desktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const dir = useMemo(() => merchantDirectory(d.transactions), [d.transactions]);
+  const dir = useMemo(() => merchantDirectory(d.transactions, kind), [d.transactions, kind]);
   const catName = useMemo(() => new Map(d.categories.map((c) => [c.id, c.name])), [d.categories]);
   const shown = useMemo(() => {
     const n = normalize(q);
@@ -28,6 +30,7 @@ export function MerchantPicker({ value, onChange, id }: {
   }, [dir, q]);
   const typed = q.trim().replace(/\s+/g, " ").slice(0, 80);
   const exact = typed ? dir.find((m) => m.key === normalize(typed)) : undefined;
+  const income = kind === "income";
   const currentKey = normalize(value ?? "");
 
   const pick = (name: string | null, entry: MerchantEntry | null) => { onChange(name, entry); setOpen(false); setQ(""); };
@@ -35,10 +38,10 @@ export function MerchantPicker({ value, onChange, id }: {
   const trigger = (
     <button type="button" id={id} onClick={() => !desktop && setOpen(true)} aria-haspopup="listbox" aria-expanded={open}
       className="flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-input bg-card px-3 text-left text-foreground transition-colors hover:border-foreground/25 focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15 md:h-10 cursor-pointer">
-      <Store className="size-4 shrink-0 text-muted-foreground" />
-      <span className={cn("min-w-0 flex-1 truncate", !value && "text-muted-foreground")}>{value || "Elige o escribe un comercio"}</span>
+      {income ? <Building2 className="size-4 shrink-0 text-muted-foreground" /> : <Store className="size-4 shrink-0 text-muted-foreground" />}
+      <span className={cn("min-w-0 flex-1 truncate", !value && "text-muted-foreground")}>{value || income ? "Elige o escribe de dónde viene" : "Elige o escribe un comercio"}</span>
       {value ? (
-        <span role="button" tabIndex={-1} aria-label="Quitar comercio" onClick={(e) => { e.stopPropagation(); onChange(null, null); }}
+        <span role="button" tabIndex={-1} aria-label={income ? "Quitar origen" : "Quitar comercio"} onClick={(e) => { e.stopPropagation(); onChange(null, null); }}
           className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <X className="size-3.5" />
         </span>
@@ -47,23 +50,23 @@ export function MerchantPicker({ value, onChange, id }: {
   );
 
   return (
-    <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }} desktop={desktop} title="Comercio" trigger={trigger}
+    <ResponsivePicker open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }} desktop={desktop} title={income ? "Origen" : "Comercio"} trigger={trigger}
       contentClassName="w-[var(--radix-popover-trigger-width)] min-w-64 p-0">
       <Command shouldFilter={false} loop className="outline-none">
         <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3">
           <Search className="size-4 shrink-0 text-muted-foreground" />
-          <Command.Input value={q} onValueChange={setQ} autoFocus={desktop} placeholder="Buscar o añadir comercio…"
+          <Command.Input value={q} onValueChange={setQ} autoFocus={desktop} placeholder={income ? "Buscar o añadir origen…" : "Buscar o añadir comercio…"}
             className="h-11 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
         </div>
         <Command.List className={cn("overflow-y-auto overscroll-contain p-1.5", desktop && "max-h-72")}>
           {typed && !exact && (
             <Command.Item value="__new" onSelect={() => pick(typed.charAt(0).toUpperCase() + typed.slice(1), null)}
               className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-2.5 text-sm font-medium text-primary data-[selected=true]:bg-muted">
-              <Plus className="size-4" /> Nuevo comercio «{typed}»
+              <Plus className="size-4" /> {income ? "Nuevo origen" : "Nuevo comercio"} «{typed}»
             </Command.Item>
           )}
           {!typed && dir.length === 0 && (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">Escribe el nombre del comercio para añadirlo</p>
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">{income ? "Escribe de dónde viene (empresa, cliente, persona…)" : "Escribe el nombre del comercio para añadirlo"}</p>
           )}
           {shown.map((m) => (
             <Command.Item key={m.key} value={m.key} onSelect={() => pick(m.name, m)}

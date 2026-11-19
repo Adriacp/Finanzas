@@ -171,9 +171,10 @@ export interface MerchantEntry {
  * Directorio de comercios a partir de los movimientos: agrupa variantes del mismo nombre
  * (mayúsculas, tildes, espacios) y calcula su categoría habitual. Ordenado por uso.
  */
-export function merchantDirectory(txs: Transaction[]): MerchantEntry[] {
+export function merchantDirectory(txs: Transaction[], kind?: "expense" | "income"): MerchantEntry[] {
   const groups = new Map<string, { spellings: Map<string, number>; count: number; lastDate: string; cats: Map<string, { c: number; cat: ID; sub: ID | null }> }>();
   for (const t of txs) {
+    if (kind === "income" ? t.type !== "income" : kind === "expense" && t.type !== "expense" && t.type !== "refund") continue;
     const raw = t.merchant?.trim();
     if (!raw) continue;
     const key = normalize(raw);
@@ -182,7 +183,7 @@ export function merchantDirectory(txs: Transaction[]): MerchantEntry[] {
     g.spellings.set(raw, (g.spellings.get(raw) ?? 0) + 1);
     g.count++;
     if (t.date > g.lastDate) g.lastDate = t.date;
-    if (t.categoryId && (t.type === "expense" || t.type === "refund")) {
+    if (t.categoryId && (t.type === "expense" || t.type === "refund" || (kind === "income" && t.type === "income"))) {
       const ck = `${t.categoryId}|${t.subcategoryId ?? ""}`;
       const cur = g.cats.get(ck) ?? { c: 0, cat: t.categoryId, sub: t.subcategoryId };
       cur.c++;

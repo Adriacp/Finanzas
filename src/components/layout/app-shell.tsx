@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { TransactionDialog } from "@/components/forms/transaction-form";
 import { CommandPalette } from "./command-palette";
+import { ConnectionBanner } from "./connection-banner";
 
 export const NAV = [
   { href: "/", label: "Inicio", icon: LayoutDashboard },
@@ -116,11 +117,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [status, openNew]);
 
   if (!isSupabaseConfigured && !isDemoMode) return <SetupRequired />;
-  if (status === "error") return <FullScreenError message={error ?? "Error"} onRetry={() => window.location.reload()} />;
+  if (status === "error") return <FullScreenError message={error ?? "Error"} onRetry={async () => { await reload(); if (useFinance.getState().status !== "ready") window.location.reload(); }} />;
   if (status !== "ready") return <FullScreenLoader />;
 
   return (
     <div className="min-h-dvh">
+      <ConnectionBanner />
       {/* Sidebar escritorio */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card/60 backdrop-blur-xl lg:flex">
         <div className="flex h-16 items-center gap-2.5 px-5">

@@ -4,6 +4,7 @@ import {
 } from "recharts";
 import type { ReactNode } from "react";
 import { formatDate, formatMonth } from "@/core/dates";
+import { formatUnitPrice } from "@/core/products";
 import type { CategoryTotal, MonthPoint } from "@/core/finance";
 import { useMoney } from "@/components/ui/money";
 
@@ -155,7 +156,7 @@ export function PriceHistoryChart({ data, height = 180, unit }: { data: { date: 
         <YAxis tickFormatter={(v) => fmt(v)} width={64} domain={["auto", "auto"]} {...axis} />
         <Tooltip content={({ active, payload }: TipProps) => {
           const p = payload?.[0]?.payload as { date: string; price: number; merchant: string | null } | undefined;
-          return active && p ? <TooltipBox title={formatDate(p.date)} rows={[{ label: p.merchant ?? "Sin comercio", value: `${fmt(p.price)} / ${unit}`, color: "var(--chart-1)" }]} /> : null;
+          return active && p ? <TooltipBox title={formatDate(p.date)} rows={[{ label: p.merchant ?? "Sin comercio", value: formatUnitPrice(p.price, unit, fmt), color: "var(--chart-1)" }]} /> : null;
         }} />
         <Line type="monotone" dataKey="price" stroke="var(--chart-1)" strokeWidth={2.2} dot={{ r: 3, fill: "var(--chart-1)" }} activeDot={{ r: 5 }} />
       </LineChart>

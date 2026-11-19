@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatDate, PERIOD_LABELS, type PeriodKey, periodRange } from "@/core/dates";
 import { normalize } from "@/core/insights";
-import { childrenMap, formatPackage, productStats, type ProductStat } from "@/core/products";
+import { childrenMap, displayUnit, formatPackage, formatUnitPrice, productStats, type ProductStat } from "@/core/products";
 import type { Product } from "@/core/types";
 import { useData, useFinance } from "@/store/finance-store";
 import { useTxDialog } from "@/store/ui-store";
@@ -126,7 +126,7 @@ function ProductRow({ s, onClick }: { s: ProductStat; onClick: () => void }) {
         <span className="block truncate text-xs text-muted-foreground">
           {s.variants.filter((v) => !v.unspecified).length > 0 && `${s.variants.filter((v) => !v.unspecified).length} marcas · `}
           {s.count} {s.count === 1 ? "compra" : "compras"}
-          {s.avgUnitPrice !== null && ` · ${fmt(s.avgUnitPrice)}/${s.product.unit} de media`}
+          {s.avgUnitPrice !== null && ` · ${formatUnitPrice(s.avgUnitPrice, s.product.unit, fmt)} de media`}
           {usual && usual !== "Sin comercio" && ` · sueles comprarlo en ${usual}`}
         </span>
       </span>
@@ -175,7 +175,7 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
 
       {isGeneric && s.variants.length > 0 && (
         <Card>
-          <CardHeader title="Marcas y variantes" subtitle={`Comparadas por precio por ${unit}, de más barata a más cara`} />
+          <CardHeader title="Marcas y variantes" subtitle={`Comparadas por precio por ${displayUnit(unit)}, de más barata a más cara`} />
           <CardBody className="space-y-1 px-2">
             {s.variants.map((v, i) => (
               <button key={v.product.id + String(v.unspecified)} disabled={v.unspecified} onClick={() => onOpen(v.product.id)}
@@ -188,10 +188,10 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
                   <span className="block truncate text-xs text-muted-foreground">
                     {!v.unspecified && v.product.packageSize ? `${formatPackage(v.product.packageSize, unit)} · ` : ""}
                     {v.count === 0 ? "sin compras en este periodo" : `${v.count} ${v.count === 1 ? "compra" : "compras"}`}
-                    {v.cheapestMerchant && v.cheapestMerchant.merchant !== "Sin comercio" && ` · más barata en ${v.cheapestMerchant.merchant} (${fmt(v.cheapestMerchant.avgUnitPrice)}/${unit})`}
+                    {v.cheapestMerchant && v.cheapestMerchant.merchant !== "Sin comercio" && ` · más barata en ${v.cheapestMerchant.merchant} (${formatUnitPrice(v.cheapestMerchant.avgUnitPrice, unit, fmt)})`}
                   </span>
                 </span>
-                <span className="shrink-0 text-right font-semibold tabular">{v.avgUnitPrice !== null ? `${fmt(v.avgUnitPrice)}/${unit}` : "—"}</span>
+                <span className="shrink-0 text-right font-semibold tabular">{v.avgUnitPrice !== null ? formatUnitPrice(v.avgUnitPrice, unit, fmt) : "—"}</span>
               </button>
             ))}
           </CardBody>
@@ -205,7 +205,7 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Gastado" value={fmt(s.total)} />
             <Stat label="Compras" value={`${s.count} · ${String(s.quantity).replace(".", ",")} ${unit}`} />
-            <Stat label={`Precio medio / ${unit}`} value={s.avgUnitPrice !== null ? fmt(s.avgUnitPrice) : "—"} />
+            <Stat label="Precio medio" value={s.avgUnitPrice !== null ? formatUnitPrice(s.avgUnitPrice, unit, fmt) : "—"} />
             <Stat label="Mín. – máx." value={s.minUnitPrice !== null ? `${fmt(s.minUnitPrice)} – ${fmt(s.maxUnitPrice!)}` : "—"} />
           </div>
 
@@ -213,8 +213,8 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
             <div className="flex gap-3 rounded-xl border border-income/30 bg-income/10 p-3 text-sm">
               <TrendingDown className="mt-0.5 size-4 shrink-0 text-income" />
               <p>
-                Sueles comprarlo en <b>{s.merchants[0].merchant}</b> ({fmt(s.merchants[0].avgUnitPrice)}/{unit}), pero en <b>{s.cheapestMerchant.merchant}</b> te sale
-                a <b>{fmt(s.cheapestMerchant.avgUnitPrice)}/{unit}</b>.
+                Sueles comprarlo en <b>{s.merchants[0].merchant}</b> ({formatUnitPrice(s.merchants[0].avgUnitPrice, unit, fmt)}), pero en <b>{s.cheapestMerchant.merchant}</b> te sale
+                a <b>{formatUnitPrice(s.cheapestMerchant.avgUnitPrice, unit, fmt)}</b>.
               </p>
             </div>
           )}
@@ -229,7 +229,7 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
                     {s.cheapestMerchant?.merchant === m.merchant && <span className="ml-2 rounded-full bg-income/15 px-2 py-0.5 text-[10px] font-medium text-income">más barato</span>}
                   </span>
                   <span className="text-xs text-muted-foreground">{m.count} {m.count === 1 ? "vez" : "veces"}</span>
-                  <span className="w-20 text-right text-xs tabular">{fmt(m.avgUnitPrice)}/{unit}</span>
+                  <span className="w-20 text-right text-xs tabular">{formatUnitPrice(m.avgUnitPrice, unit, fmt)}</span>
                   <Money value={m.total} className="w-20 text-right font-medium" />
                 </div>
               ))}

@@ -48,7 +48,7 @@ describe("productos", () => {
     expect(h.count).toBe(3);
     expect(h.quantity).toBe(4);
     expect(h.total).toBe(9.5); // 2,40 + 5,00 + 2,10
-    expect(h.avgUnitPrice).toBe(2.38);
+    expect(h.avgUnitPrice).toBeCloseTo(2.375, 4);
     expect(h.minUnitPrice).toBe(2.1);
     expect(h.lastUnitPrice).toBe(2.1);
     expect(h.lastDate).toBe("2026-11-02");
@@ -151,5 +151,29 @@ describe("formatos por compra", () => {
       { ...item(b.id, "v", "V", 0.5, 3), packageSize: 0.5 },
     ];
     expect(usedPackageSizes("pk", items, [a, b])).toEqual([0.75, 0.5]); // el más reciente primero
+  });
+
+  it("no redondea el precio por unidad a 2 decimales y lo muestra por kg", async () => {
+    const { productStats, formatUnitPrice } = await import("./products");
+    const fideos: Product = { id: "fid", name: "Fideos", unit: "g", categoryId: null };
+    const yaki: Product = { id: "ya", name: "Yakisoba", unit: "g", categoryId: null, parentId: "fid" };
+    const maggi: Product = { id: "mg", name: "Maggi", unit: "g", categoryId: null, parentId: "fid" };
+    const a = tx({ merchant: "Dia", date: "2026-11-18" });
+    const b = tx({ merchant: "Dia", date: "2026-11-19" });
+    const items = [item(a.id, "ya", "Yakisoba", 93, 1.42 / 93), item(b.id, "mg", "Maggi", 90, 1.97 / 90)];
+    const gen = productStats([fideos, yaki, maggi], items, [a, b]).find((s) => s.product.id === "fid")!;
+    expect(gen.variants[0].product.id).toBe("ya");
+    expect(gen.variants[0].avgUnitPrice).not.toBeCloseTo(gen.variants[1].avgUnitPrice!, 3);
+    const fmt = (n: number) => n.toFixed(2).replace(".", ",") + " €";
+    expect(formatUnitPrice(1.42 / 93, "g", fmt)).toBe("15,27 €/kg");
+    expect(formatUnitPrice(0.0153, "g", fmt)).toContain("kg");
+  });
+
+  it("el directorio de orígenes solo incluye ingresos y el de comercios solo gastos", async () => {
+    const { merchantDirectory } = await import("./insights");
+    const txs = [tx({ merchant: "Spar", type: "expense" }), tx({ merchant: "Empresa SL", type: "income" })];
+    expect(merchantDirectory(txs, "income").map((m) => m.name)).toEqual(["Empresa SL"]);
+    expect(merchantDirectory(txs, "expense").map((m) => m.name)).toEqual(["Spar"]);
+    expect(merchantDirectory(txs).length).toBe(2);
   });
 });

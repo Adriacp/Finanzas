@@ -2,6 +2,7 @@
 import { Info, Store, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, PERIOD_LABELS, type PeriodKey, periodRange } from "@/core/dates";
+import { formatUnitPrice } from "@/core/products";
 import { compareMerchants, merchantGroups, type MerchantComparison } from "@/core/merchants";
 import { useData } from "@/store/finance-store";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -99,14 +100,14 @@ export default function MerchantsPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Más barato en <b className="text-income">{p.cheapest.merchant}</b> ({fmt(p.cheapest.avgUnitPrice)}/{p.product.unit}),
-                      más caro en <b className="text-expense">{p.priciest.merchant}</b> ({fmt(p.priciest.avgUnitPrice)}/{p.product.unit})
+                      Más barato en <b className="text-income">{p.cheapest.merchant}</b> ({formatUnitPrice(p.cheapest.avgUnitPrice, p.product.unit, fmt)}),
+                      más caro en <b className="text-expense">{p.priciest.merchant}</b> ({formatUnitPrice(p.priciest.avgUnitPrice, p.product.unit, fmt)})
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {p.prices.map((x, i) => (
                         <span key={x.merchantKey} className={cn("rounded-lg px-2 py-1 text-[11px] tabular",
                           i === 0 ? "bg-income/12 text-income" : i === p.prices.length - 1 ? "bg-expense/12 text-expense" : "bg-muted text-muted-foreground")}>
-                          {x.merchant} {fmt(x.avgUnitPrice)}
+                          {x.merchant} {formatUnitPrice(x.avgUnitPrice, p.product.unit, fmt)}
                         </span>
                       ))}
                     </div>

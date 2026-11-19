@@ -97,7 +97,8 @@ export function productStats(products: Product[], items: TransactionItem[], txs:
     const kids = product.parentId ? [] : children.get(product.id) ?? [];
     const purchases = [product, ...kids].flatMap((p) => byProduct.get(p.id) ?? []).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     const total = round2(purchases.reduce((s, p) => s + p.amount, 0));
-    const quantity = round2(purchases.reduce((s, p) => s + p.quantity, 0));
+    const rawQuantity = purchases.reduce((s, p) => s + p.quantity, 0);
+    const quantity = round2(rawQuantity);
     const prices = purchases.map((p) => p.unitPrice).filter((x) => x > 0);
 
     const merchMap = new Map<string, { name: string; count: number; total: number; qty: number; lastDate: ISODate }>();
@@ -112,7 +113,7 @@ export function productStats(products: Product[], items: TransactionItem[], txs:
       merchMap.set(key, cur);
     }
     const merchants: MerchantStat[] = [...merchMap.values()]
-      .map((m) => ({ merchant: m.name, count: m.count, total: round2(m.total), avgUnitPrice: m.qty > 0 ? round2(m.total / m.qty) : 0, lastDate: m.lastDate }))
+      .map((m) => ({ merchant: m.name, count: m.count, total: round2(m.total), avgUnitPrice: m.qty > 0 ? m.total / m.qty : 0, lastDate: m.lastDate }))
       .sort((a, b) => b.count - a.count || b.total - a.total);
     const known = merchants.filter((m) => m.merchant !== "Sin comercio" && m.avgUnitPrice > 0);
     const cheapestMerchant = known.length >= 2 ? [...known].sort((a, b) => a.avgUnitPrice - b.avgUnitPrice)[0] : null;
@@ -122,7 +123,7 @@ export function productStats(products: Product[], items: TransactionItem[], txs:
       total,
       count: purchases.length,
       quantity,
-      avgUnitPrice: quantity > 0 ? round2(total / quantity) : null,
+      avgUnitPrice: rawQuantity > 0 ? purchases.reduce((s, p) => s + p.amount, 0) / rawQuantity : null,
       minUnitPrice: prices.length ? Math.min(...prices) : null,
       maxUnitPrice: prices.length ? Math.max(...prices) : null,
       lastUnitPrice: purchases[0]?.unitPrice ?? null,
@@ -153,11 +154,11 @@ function variantStats(generic: Product, kids: Product[], byProduct: Map<ID, Prod
       perMerchant.set(key, cur);
     }
     const cheapest = [...perMerchant.values()].filter((m) => m.qty > 0)
-      .map((m) => ({ merchant: m.name, avgUnitPrice: round2(m.total / m.qty) }))
+      .map((m) => ({ merchant: m.name, avgUnitPrice: m.total / m.qty }))
       .sort((a, b) => a.avgUnitPrice - b.avgUnitPrice)[0] ?? null;
     entries.push({
       product: p, unspecified, count: list.length, total: round2(total), quantity: round2(quantity),
-      avgUnitPrice: quantity > 0 ? round2(total / quantity) : null, cheapestMerchant: cheapest,
+      avgUnitPrice: quantity > 0 ? total / quantity : null, cheapestMerchant: cheapest,
     });
   }
   // De más barata a más cara por unidad; las que aún no tienen compras, al final
@@ -269,3 +270,23 @@ export function productsByUsage(products: Product[], items: TransactionItem[]): 
 }
 
 export const findProductByName = (products: Product[], name: string) => products.find((p) => normalize(p.name) === normalize(name));
+
+/**
+ * Precio por unidad legible: g → €/kg, ml → €/l, cl → €/l; el resto, por su unidad.
+ * Nunca muestra 0,00 aunque el precio sea muy pequeño.
+ */
+export function formatUnitPrice(pricePerUnit: number, unit: string, fmt: (n: number) => string): string {
+  let price = pricePerUnit;
+  let label = unit;
+  if (unit === "g") { price *= 1000; label = "kg"; }
+  else if (unit === "ml") { price *= 1000; label = "l"; }
+  else if (unit === "cl") { price *= 100; label = "l"; }
+  if (price > 0 && price < 0.1) {
+    const n = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumSignificantDigits: 2 }).format(price);
+    return `${n}/${label}`;
+  }
+  return `${fmt(price)}/${label}`;
+}
+
+/** Unidad en la que se muestran los precios (g → kg, ml/cl → l). */
+export const displayUnit = (unit: string) => (unit === "g" ? "kg" : unit === "ml" || unit === "cl" ? "l" : unit);

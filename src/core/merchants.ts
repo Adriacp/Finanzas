@@ -112,7 +112,7 @@ export function compareMerchants(
     const product = productById.get(productId);
     if (!product || byMerchant.size < 2) continue;
     const prices = [...byMerchant.entries()]
-      .map(([merchantKey, v]) => ({ merchantKey, merchant: nameOf(merchantKey), avgUnitPrice: round2(v.amount / v.qty), purchases: v.n }))
+      .map(([merchantKey, v]) => ({ merchantKey, merchant: nameOf(merchantKey), avgUnitPrice: v.amount / v.qty, purchases: v.n }))
       .sort((a, b) => a.avgUnitPrice - b.avgUnitPrice);
     const ref = prices.reduce((s, p) => s + p.avgUnitPrice, 0) / prices.length;
     if (ref <= 0) continue;

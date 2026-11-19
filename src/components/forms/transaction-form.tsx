@@ -216,13 +216,13 @@ function TransactionForm() {
       {/* El comercio va primero: al elegirlo se rellenan solos el concepto, la categoría habitual,
           la cuenta y la forma de pago que sueles usar allí */}
       {tx.type !== "transfer" && (
-        <Field label="Comercio">
-          <MerchantPicker value={tx.merchant} onChange={(name) => {
+        <Field label={tx.type === "income" ? "Origen" : "Comercio"}>
+          <MerchantPicker kind={tx.type === "income" ? "income" : "expense"} value={tx.merchant} onChange={(name) => {
             const last = name ? lastAtMerchant(name) : undefined;
             setTx((p) => ({
               ...p,
               merchant: name,
-              concept: p.concept.trim() ? p.concept : name ? `Compra ${name}` : p.concept,
+              concept: p.concept.trim() ? p.concept : name ? `${p.type === "income" ? "Ingreso de" : "Compra"} ${name}` : p.concept,
               accountId: last?.accountId && !accountTouched.current ? last.accountId : p.accountId,
               paymentMethod: p.paymentMethod ?? last?.paymentMethod ?? null,
             }));
