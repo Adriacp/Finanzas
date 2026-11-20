@@ -3,7 +3,7 @@ import { buildDefaultCategories, buildDefaultProducts } from "@/core/defaults";
 import { lineTotal } from "@/core/products";
 import { toISO } from "@/core/dates";
 import { round2 } from "@/core/money";
-import type { Account, Budget, Category, FinanceData, Goal, Product, Recurring, Transaction, TransactionItem } from "@/core/types";
+import type { Account, Budget, Category, FinanceData, Goal, Product, Recurring, ShoppingItem, Transaction, TransactionItem } from "@/core/types";
 import { newId } from "./repository";
 
 /** Datos de ejemplo realistas (6 meses) para explorar la app en modo demo. */
@@ -154,5 +154,9 @@ export function buildSampleData(today = new Date()): Omit<FinanceData, "profile"
     { id: newId(), name: "Entrada vivienda", targetAmount: 40000, savedAmount: 4200, deadline: toISO(new Date(today.getFullYear() + 4, 0, 1)), accountId: null, color: "#6366f1", icon: "house", notes: null, archived: false },
   ];
 
-  return { accounts, categories, transactions, budgets, recurring, goals, products, transactionItems, savedViews: [{ id: newId(), name: "Cenas con amigos", filters: { q: "#amigos" } }] };
+  const shoppingItems: ShoppingItem[] = [["Leche", 6], ["Huevos", 1], ["Plátanos", 1], ["Pan", 2]].map(([name, qty], i) => ({
+    id: newId(), productId: products.find((p) => p.name === name)?.id ?? null, name: name as string, quantity: qty as number, note: null, checked: i === 3, sortOrder: i,
+  }));
+
+  return { accounts, categories, transactions, budgets, recurring, goals, products, transactionItems, shoppingItems, savedViews: [{ id: newId(), name: "Cenas con amigos", filters: { q: "#amigos" } }] };
 }

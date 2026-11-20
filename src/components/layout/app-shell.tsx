@@ -1,7 +1,7 @@
 "use client";
 import {
   ArrowLeftRight, CalendarDays, ChartPie, Ellipsis, Eye, EyeOff, FileText, Goal, LayoutDashboard, Plus, Repeat, Search, Settings,
-  Tags, Wallet, PiggyBank, ShoppingBasket, Store, LoaderCircle, TriangleAlert, Database,
+  Tags, Wallet, PiggyBank, ShoppingBasket, ListChecks, Store, TriangleAlert, Database,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ export const NAV = [
   { href: "/transactions", label: "Movimientos", icon: ArrowLeftRight },
   { href: "/analytics", label: "Análisis", icon: ChartPie },
   { href: "/products", label: "Productos", icon: ShoppingBasket },
+  { href: "/shopping", label: "Lista de la compra", icon: ListChecks },
   { href: "/merchants", label: "Comercios", icon: Store },
   { href: "/budgets", label: "Presupuestos", icon: PiggyBank },
   { href: "/accounts", label: "Cuentas", icon: Wallet },
@@ -35,7 +36,8 @@ export const NAV = [
   { href: "/settings", label: "Ajustes", icon: Settings },
 ] as const;
 
-const MOBILE_TABS = [NAV[0], NAV[1], null, NAV[2]] as const;
+const MOBILE_TABS = [NAV[0], NAV[1], null, NAV[3]] as const;
+const MOBILE_HREFS: string[] = MOBILE_TABS.flatMap((t) => (t ? [t.href] : []));
 
 /** Evita arrancar la carga de datos dos veces en paralelo. */
 let booting = false;
@@ -210,7 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Modal open={more} onOpenChange={setMore} title="Más secciones" size="sm">
         <div className="grid grid-cols-3 gap-2">
-          {NAV.slice(3).map((n) => (
+          {NAV.filter((n) => !MOBILE_HREFS.includes(n.href)).map((n) => (
             <Link key={n.href} href={n.href} className={cn("flex flex-col items-center gap-2 rounded-2xl border border-border p-3 text-xs font-medium", isActive(path, n.href) ? "bg-accent text-accent-foreground" : "bg-card")}>
               <n.icon className="size-6" /> {n.label}
             </Link>
@@ -232,13 +234,27 @@ export function Logo() {
   );
 }
 
+/** Esqueleto con la estructura de la app mientras cargan los datos: se siente como si abriera al instante. */
 function FullScreenLoader() {
+  const block = "animate-pulse rounded-2xl bg-muted";
   return (
-    <div className="grid min-h-dvh place-items-center">
-      <div className="flex flex-col items-center gap-3 text-muted-foreground">
-        <Logo />
-        <LoaderCircle className="size-5 animate-spin" />
-      </div>
+    <div className="min-h-dvh" role="status" aria-label="Cargando">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-3 border-r border-border bg-card/60 p-4 lg:flex">
+        <div className="flex items-center gap-2.5 px-1 pb-2"><Logo /><span className="text-[15px] font-semibold tracking-tight">Finanzas</span></div>
+        {Array.from({ length: 8 }).map((_, i) => <div key={i} className={cn(block, "h-9")} />)}
+      </aside>
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 px-4 pt-safe lg:hidden">
+        <Logo /><span className="font-semibold tracking-tight">Finanzas</span>
+      </header>
+      <main className="lg:pl-64">
+        <div className="mx-auto max-w-6xl space-y-4 px-4 pt-5 pb-32 md:px-8 md:pt-8">
+          <div className={cn(block, "h-8 w-48")} />
+          <div className={cn(block, "h-36")} />
+          <div className="grid grid-cols-2 gap-3"><div className={cn(block, "h-24")} /><div className={cn(block, "h-24")} /></div>
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className={cn(block, "h-16")} />)}
+        </div>
+      </main>
+      <div className="fixed inset-x-0 bottom-0 z-40 h-16 border-t border-border/60 bg-background/85 pb-safe lg:hidden" />
     </div>
   );
 }

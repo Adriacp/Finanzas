@@ -347,7 +347,7 @@ function FormatDialog({ open, onOpenChange, unit, onSubmit }: {
 }
 
 /** Selector de producto con buscador; si no existe, permite crearlo al momento. */
-function ProductPicker({ value, name, onPick }: { value: string | null; name: string; onPick: (p: Product) => void }) {
+export function ProductPicker({ value, name, onPick }: { value: string | null; name: string; onPick: (p: Product) => void }) {
   const d = useData();
   const desktop = useIsDesktop();
   const [open, setOpen] = useState(false);

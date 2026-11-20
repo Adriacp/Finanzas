@@ -176,4 +176,24 @@ describe("formatos por compra", () => {
     expect(merchantDirectory(txs, "expense").map((m) => m.name)).toEqual(["Spar"]);
     expect(merchantDirectory(txs).length).toBe(2);
   });
+
+  it("lista de la compra: estima con el último precio y elige el comercio más barato", async () => {
+    const { shoppingInsights, estimatedTotal, bestMerchantForList, checkedToItems } = await import("./shopping");
+    const a = tx({ merchant: "Spar", date: "2026-11-01" });
+    const b = tx({ merchant: "Lidl", date: "2026-11-05" });
+    const items = [item(a.id, "p-leche", "Leche", 1, 1.2), item(b.id, "p-leche", "Leche", 1, 0.9), item(b.id, "p-huevos", "Huevos", 1, 2.4)];
+    const list = [
+      { id: "s1", productId: "p-leche", name: "Leche", quantity: 6, note: null, checked: true, sortOrder: 0 },
+      { id: "s2", productId: null, name: "Pilas", quantity: null, note: null, checked: false, sortOrder: 1 },
+    ];
+    const ins = shoppingInsights(list, [leche, huevos], items, [a, b]);
+    expect(ins[0].lastUnitPrice).toBe(0.9);
+    expect(ins[0].estimated).toBe(5.4);
+    expect(ins[1].estimated).toBeNull();
+    expect(estimatedTotal(ins)).toBe(5.4);
+    expect(bestMerchantForList(list, [leche, huevos], items, [a, b])?.merchant).toBe("Lidl");
+    const lines = checkedToItems(ins, () => "x");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ productId: "p-leche", quantity: 6, unitPrice: 0.9, amount: 5.4 });
+  });
 });

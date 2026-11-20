@@ -39,7 +39,7 @@ export function MerchantPicker({ value, onChange, id, kind = "expense" }: {
     <button type="button" id={id} onClick={() => !desktop && setOpen(true)} aria-haspopup="listbox" aria-expanded={open}
       className="flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-input bg-card px-3 text-left text-foreground transition-colors hover:border-foreground/25 focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15 md:h-10 cursor-pointer">
       {income ? <Building2 className="size-4 shrink-0 text-muted-foreground" /> : <Store className="size-4 shrink-0 text-muted-foreground" />}
-      <span className={cn("min-w-0 flex-1 truncate", !value && "text-muted-foreground")}>{value || income ? "Elige o escribe de dónde viene" : "Elige o escribe un comercio"}</span>
+      <span className={cn("min-w-0 flex-1 truncate", !value && "text-muted-foreground")}>{value || (income ? "Elige o escribe de dónde viene" : "Elige o escribe un comercio")}</span>
       {value ? (
         <span role="button" tabIndex={-1} aria-label={income ? "Quitar origen" : "Quitar comercio"} onClick={(e) => { e.stopPropagation(); onChange(null, null); }}
           className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">

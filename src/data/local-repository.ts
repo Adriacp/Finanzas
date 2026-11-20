@@ -8,11 +8,10 @@ import { newId, type EntityKey, type EntityMap, type FinanceRepository } from ".
  * En producción se usa SupabaseRepository.
  */
 const KEY = "finanzas-demo-v1";
-const FILES_KEY = "finanzas-demo-files-v1";
 
 const empty = (): FinanceData => ({
   profile: { id: "demo", displayName: "Demo", currency: "EUR", monthlyBudget: null, seeded: false, productsSeeded: false, balancesConfirmed: false },
-  accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [], products: [], transactionItems: [],
+  accounts: [], categories: [], transactions: [], budgets: [], recurring: [], goals: [], savedViews: [], products: [], transactionItems: [], shoppingItems: [],
 });
 
 export class LocalRepository implements FinanceRepository {
@@ -88,6 +87,7 @@ export class LocalRepository implements FinanceRepository {
       d.transactionItems = d.transactionItems.map((i) => (del.has(i.productId ?? "") ? { ...i, productId: null } : i));
       d.products = d.products.map((p) => (del.has(p.parentId ?? "") ? { ...p, parentId: null } : p)); // variantes → genéricos
     }
+    if (entity === "products") d.shoppingItems = d.shoppingItems.map((i) => (del.has(i.productId ?? "") ? { ...i, productId: null } : i));
     if (entity === "categories") d.products = d.products.map((p) => (del.has(p.categoryId ?? "") ? { ...p, categoryId: null } : p));
     (d[entity] as EntityMap[K][]) = (d[entity] as EntityMap[K][]).filter((x) => !del.has(x.id));
     this.write();
@@ -113,37 +113,6 @@ export class LocalRepository implements FinanceRepository {
     this.data.profile.seeded = true;
     this.write();
     return true;
-  }
-
-  private files(): Record<string, string> {
-    try { return JSON.parse(localStorage.getItem(FILES_KEY) ?? "{}"); } catch { return {}; }
-  }
-
-  async uploadAttachment(file: File): Promise<string> {
-    if (file.size > 1.5 * 1024 * 1024) throw new Error("En modo demo los adjuntos están limitados a 1,5 MB. Con Supabase el límite es 10 MB.");
-    const dataUrl = await new Promise<string>((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result as string);
-      r.onerror = () => rej(new Error("No se pudo leer el archivo"));
-      r.readAsDataURL(file);
-    });
-    const path = `demo/${newId()}-${file.name}`;
-    const files = this.files();
-    files[path] = dataUrl;
-    try { localStorage.setItem(FILES_KEY, JSON.stringify(files)); } catch { throw new Error("No hay espacio en el navegador para el adjunto."); }
-    return path;
-  }
-
-  async attachmentUrl(path: string): Promise<string> {
-    const url = this.files()[path];
-    if (!url) throw new Error("Adjunto no encontrado");
-    return url;
-  }
-
-  async removeAttachment(path: string): Promise<void> {
-    const files = this.files();
-    delete files[path];
-    localStorage.setItem(FILES_KEY, JSON.stringify(files));
   }
 
   async replaceAll(data: Omit<FinanceData, "profile"> & { profile?: Partial<Profile> }): Promise<void> {

@@ -184,6 +184,17 @@ export interface SavedView {
   filters: TxFilters;
 }
 
+export interface ShoppingItem {
+  id: ID;
+  productId: ID | null;
+  name: string;
+  quantity: number | null;
+  note: string | null;
+  checked: boolean;
+  sortOrder: number;
+  createdAt?: string;
+}
+
 export interface FinanceData {
   profile: Profile;
   accounts: Account[];
@@ -195,6 +206,7 @@ export interface FinanceData {
   savedViews: SavedView[];
   products: Product[];
   transactionItems: TransactionItem[];
+  shoppingItems: ShoppingItem[];
 }
 
 export type NewEntity<T extends { id: ID }> = Omit<T, "id"> & { id?: ID };

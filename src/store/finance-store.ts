@@ -37,6 +37,8 @@ interface FinanceState {
   variantsSupported: boolean;
   /** La BD guarda el formato del envase de cada compra (migración 0004). */
   itemFormatsSupported: boolean;
+  /** La BD tiene la tabla de la lista de la compra (migración 0005). */
+  shoppingSupported: boolean;
   reset(): void;
 }
 
@@ -120,6 +122,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     schemaOutdated: false,
     variantsSupported: true,
     itemFormatsSupported: true,
+    shoppingSupported: true,
 
     async init(r) {
       set({ repo: r, status: "loading", error: null });
@@ -137,7 +140,7 @@ export const useFinance = create<FinanceState>((set, get) => {
           // Si la reparación falla, se sigue con los datos tal cual (se reintentará en el próximo arranque).
           data = await r.loadAll();
         }
-        set({ data, status: "ready", schemaOutdated: !!r.schemaOutdated, variantsSupported: r.variantsSupported !== false, itemFormatsSupported: r.itemFormatsSupported !== false });
+        set({ data, status: "ready", shoppingSupported: r.shoppingSupported !== false, schemaOutdated: !!r.schemaOutdated, variantsSupported: r.variantsSupported !== false, itemFormatsSupported: r.itemFormatsSupported !== false });
       } catch (e) {
         set({ status: "error", error: errMsg(e) });
       }
@@ -146,7 +149,7 @@ export const useFinance = create<FinanceState>((set, get) => {
     async reload() {
       try {
         const data = await repo().loadAll();
-        set({ data, status: "ready", error: null, schemaOutdated: !!repo().schemaOutdated, variantsSupported: repo().variantsSupported !== false, itemFormatsSupported: repo().itemFormatsSupported !== false });
+        set({ data, status: "ready", error: null, shoppingSupported: repo().shoppingSupported !== false, schemaOutdated: !!repo().schemaOutdated, variantsSupported: repo().variantsSupported !== false, itemFormatsSupported: repo().itemFormatsSupported !== false });
       } catch (e) {
         set({ error: errMsg(e) });
       }

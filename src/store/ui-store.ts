@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Transaction, TxType } from "@/core/types";
+import type { Transaction, TransactionItem, TxType } from "@/core/types";
 
 /** Estado de interfaz (no financiero): diálogos abiertos, privacidad, etc. */
 interface TxDialogState {
@@ -11,7 +11,11 @@ interface TxDialogState {
   /** Al duplicar: movimiento original (para copiar también su desglose) */
   sourceId: string | null;
   defaultType: TxType;
-  openNew(defaults?: Partial<Transaction>): void;
+  /** Desglose precargado (p. ej. al terminar la compra de la lista) */
+  initialItems: TransactionItem[] | null;
+  /** Se ejecuta una vez que el movimiento se ha guardado */
+  onSaved: (() => void) | null;
+  openNew(defaults?: Partial<Transaction>, opts?: { items?: TransactionItem[]; onSaved?: () => void }): void;
   openEdit(tx: Transaction): void;
   openDuplicate(tx: Transaction): void;
   close(): void;
@@ -23,11 +27,13 @@ export const useTxDialog = create<TxDialogState>((set) => ({
   mode: "create",
   sourceId: null,
   defaultType: "expense",
-  openNew: (defaults) => set({ open: true, mode: "create", initial: defaults ?? null, sourceId: null }),
-  openEdit: (tx) => set({ open: true, mode: "edit", initial: tx, sourceId: null }),
+  initialItems: null,
+  onSaved: null,
+  openNew: (defaults, opts) => set({ open: true, mode: "create", initial: defaults ?? null, sourceId: null, initialItems: opts?.items ?? null, onSaved: opts?.onSaved ?? null }),
+  openEdit: (tx) => set({ open: true, mode: "edit", initial: tx, sourceId: null, initialItems: null, onSaved: null }),
   openDuplicate: (tx) => {
     const { id: _id, createdAt: _c, attachmentPath: _a, ...rest } = tx;
-    set({ open: true, mode: "create", initial: { ...rest, attachmentPath: null }, sourceId: tx.id });
+    set({ open: true, mode: "create", initial: { ...rest, attachmentPath: null }, sourceId: tx.id, initialItems: null, onSaved: null });
   },
   close: () => set({ open: false }),
 }));

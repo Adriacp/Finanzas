@@ -12,6 +12,7 @@ const TABLE: Record<EntityKey, string> = {
   savedViews: "saved_views",
   products: "products",
   transactionItems: "transaction_items",
+  shoppingItems: "shopping_items",
 };
 
 const NUMERIC = new Set(["amount", "initialBalance", "targetAmount", "savedAmount", "monthlyBudget", "quantity", "unitPrice", "packageSize"]);
@@ -65,6 +66,8 @@ export class SupabaseRepository implements FinanceRepository {
   variantsSupported = true;
   /** false si falta la migración 0004 (formato del envase en cada compra) */
   itemFormatsSupported = true;
+  /** false si falta la migración 0005 (lista de la compra); no cuenta como esquema desactualizado */
+  shoppingSupported = true;
   constructor(private sb: SupabaseClient, private userId: string) {}
 
   private async selectAll<K extends EntityKey>(entity: K): Promise<EntityMap[K][]> {
@@ -73,7 +76,9 @@ export class SupabaseRepository implements FinanceRepository {
       const res = await this.sb.from(TABLE[entity]).select("*").order("created_at").range(from, from + PAGE - 1);
       // Tablas nuevas que aún no existen en la BD: seguir sin ellas y avisar
       if (res.error && OPTIONAL_ENTITIES.has(entity) && isMissingSchema(res.error.message)) {
-        this.schemaOutdated = true;
+        // La lista de la compra es independiente del resto: su ausencia no desactiva productos ni desgloses
+        if (entity === "shoppingItems") this.shoppingSupported = false;
+        else this.schemaOutdated = true;
         return [];
       }
       const data = check(res);
@@ -149,27 +154,9 @@ export class SupabaseRepository implements FinanceRepository {
     return Array.isArray(data) && data.length > 0;
   }
 
-  async uploadAttachment(file: File): Promise<string> {
-    if (file.size > 10 * 1024 * 1024) throw new RepoError("El archivo supera el máximo de 10 MB.");
-    const ext = (file.name.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const path = `${this.userId}/${newId()}.${ext}`;
-    check(await this.sb.storage.from("receipts").upload(path, file, { contentType: file.type, upsert: false }));
-    return path;
-  }
-
-  async attachmentUrl(path: string): Promise<string> {
-    const data = check(await this.sb.storage.from("receipts").createSignedUrl(path, 60 * 10));
-    if (!data?.signedUrl) throw new RepoError("No se pudo obtener el adjunto");
-    return data.signedUrl;
-  }
-
-  async removeAttachment(path: string): Promise<void> {
-    check(await this.sb.storage.from("receipts").remove([path]));
-  }
-
   async replaceAll(data: Omit<FinanceData, "profile"> & { profile?: Partial<Profile> }): Promise<void> {
     // Borrado en orden inverso a las dependencias, luego inserción en orden.
-    const entities = ENTITY_ORDER.filter((e) => !(this.schemaOutdated && OPTIONAL_ENTITIES.has(e)));
+    const entities = ENTITY_ORDER.filter((e) => (e === "shoppingItems" ? this.shoppingSupported : !(this.schemaOutdated && OPTIONAL_ENTITIES.has(e))));
     for (const e of [...entities].reverse()) check(await this.sb.from(TABLE[e]).delete().eq("user_id", this.userId));
     for (const e of entities) {
       const rows = (data[e] ?? []) as EntityMap[typeof e][];

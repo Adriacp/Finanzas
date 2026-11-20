@@ -116,7 +116,6 @@ export default function ReportsPage() {
             <Upload className="size-4" /> {busy === "restore" ? "Restaurando…" : "Restaurar copia"}
             <input type="file" accept="application/json,.json" className="sr-only" disabled={!!busy} onChange={(e) => { restore(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
-          <p className="w-full text-xs text-muted-foreground">Los archivos adjuntos (tickets) no se incluyen en la copia: permanecen en el almacenamiento seguro de Supabase.</p>
         </CardBody>
       </Card>
     </div>

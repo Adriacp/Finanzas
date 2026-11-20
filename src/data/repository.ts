@@ -1,4 +1,4 @@
-import type { Account, Budget, Category, FinanceData, Goal, Product, Profile, Recurring, SavedView, Transaction, TransactionItem } from "@/core/types";
+import type { Account, Budget, Category, FinanceData, Goal, Product, Profile, Recurring, SavedView, ShoppingItem, Transaction, TransactionItem } from "@/core/types";
 
 /**
  * Contrato de acceso a datos. La UI y el store solo hablan con esta interfaz,
@@ -15,6 +15,7 @@ export interface EntityMap {
   savedViews: SavedView;
   products: Product;
   transactionItems: TransactionItem;
+  shoppingItems: ShoppingItem;
 }
 export type EntityKey = keyof EntityMap;
 
@@ -39,13 +40,12 @@ export interface FinanceRepository {
    * La app sigue funcionando sin esas funciones y muestra un aviso.
    */
   readonly schemaOutdated?: boolean;
+  /** false si falta la migración 0005 (lista de la compra) */
+  readonly shoppingSupported?: boolean;
   /** false si la BD aún no admite variantes/formatos de producto (migración 0003). */
   readonly variantsSupported?: boolean;
   /** false si la BD aún no guarda el formato del envase de cada compra (migración 0004). */
   readonly itemFormatsSupported?: boolean;
-  uploadAttachment(file: File): Promise<string>;
-  attachmentUrl(path: string): Promise<string>;
-  removeAttachment(path: string): Promise<void>;
   /** Restaura una copia de seguridad: borra todos los datos del usuario y los sustituye. */
   replaceAll(data: Omit<FinanceData, "profile"> & { profile?: Partial<Profile> }): Promise<void>;
 }
@@ -59,7 +59,7 @@ export const newId = (): string =>
       });
 
 /** Orden seguro de inserción/borrado respetando claves foráneas. */
-export const ENTITY_ORDER: EntityKey[] = ["accounts", "categories", "products", "recurring", "transactions", "transactionItems", "budgets", "goals", "savedViews"];
+export const ENTITY_ORDER: EntityKey[] = ["accounts", "categories", "products", "recurring", "transactions", "transactionItems", "shoppingItems", "budgets", "goals", "savedViews"];
 
 /** Entidades añadidas en la migración 0002: si faltan sus tablas, la app sigue funcionando sin ellas. */
-export const OPTIONAL_ENTITIES = new Set<EntityKey>(["products", "transactionItems"]);
+export const OPTIONAL_ENTITIES = new Set<EntityKey>(["products", "transactionItems", "shoppingItems"]);

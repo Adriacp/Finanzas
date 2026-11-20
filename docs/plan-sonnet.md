@@ -1,68 +1,131 @@
-# Plan: precio por unidad, reconexión y «Origen» en ingresos
+# Plan 2: arreglos y mejoras
 
-Para ejecutar con Sonnet. Cada tarea es independiente; hazlas en orden y ejecuta `npm run check` al final de cada una.
-No hace falta migración de base de datos.
+Para ejecutar con Sonnet. **La parte A es obligatoria**; de la B, ejecuta solo las tareas que el usuario indique (por ejemplo: «Ejecuta A, B1 y B3»).
+Ejecuta `npm run check` al acabar cada tarea y `npx next build` al final. No hace falta ninguna migración ni tabla nueva en Supabase.
 
-## Contexto rápido
-- App Next.js + Zustand + Supabase. Lógica pura en `src/core` (con tests vitest), UI en `src/app/(app)` y `src/components`.
-- Los productos guardan cantidades en su unidad (`ud`, `kg`, `g`, `l`, `ml`…). `fmt()` formatea dinero con 2 decimales.
+> El plan anterior (precio por unidad, conexión y Origen) ya está hecho y subido.
 
 ---
 
-## 1. Precio por unidad mal redondeado (bug)
+## A1. El origen o comercio «no se guarda» (bug de visualización)
 
-**Causa:** en `src/core/products.ts`, `productStats` redondea los precios medios por unidad con `round2` (líneas ~115, 118, 125, 156, 160).
-Yakisoba 1,42 € / 93 g = 0,0153 €/g y Maggi 1,97 € / 90 g = 0,0219 €/g: los dos quedan en 0,02.
-Además se **ordena** con el valor redondeado, así que el orden de «más barata» puede salir mal.
+**Causa (ya confirmada):** el valor sí se guarda en el movimiento, pero el botón no lo muestra.
+En `src/components/forms/merchant-picker.tsx:42` falta un paréntesis:
+```tsx
+{value || income ? "Elige o escribe de dónde viene" : "Elige o escribe un comercio"}
+```
+Se evalúa como `(value || income) ? … : …`, así que con un valor elegido muestra el texto de ayuda.
 
-**Cambios:**
-1. En `src/core/products.ts`, quitar `round2` de todos los `avgUnitPrice` (medias de producto, variantes, comercios y `cheapestMerchant`). Solo `lineTotal` y los totales en euros siguen redondeados.
-2. Crear en `src/core/products.ts` una función `formatUnitPrice(pricePerUnit: number, unit: string, fmt: (n: number) => string): string`:
-   - `g` → mostrar por kg (precio × 1000, «€/kg»); `ml` → por l (× 1000, «€/l»); `cl` → por l (× 100).
-   - El resto: `fmt(precio)` + `/unidad`. Si el precio es < 0,10, usar 3 o 4 decimales significativos (por ejemplo, `Intl.NumberFormat` con `maximumSignificantDigits: 3`) para que nunca salga 0,00.
-3. Sustituir los `${fmt(x.avgUnitPrice)}/${unit}` por `formatUnitPrice(...)` en:
-   - `src/app/(app)/products/page.tsx`, líneas ~129, 191, 194, 208 y 216. Para el `Stat` de la 208, cambiar la etiqueta a «Precio medio» y poner la unidad dentro del valor.
-   - `src/app/(app)/merchants/page.tsx`, líneas ~102, 103 y 109.
-   - En la página de productos, cambiar el subtítulo «Comparadas por precio por g» para que use la unidad mostrada (kg).
-4. Test en `src/core/products.test.ts`: dos variantes con 1,42 €/93 g y 1,97 €/90 g → la de 93 g sale primero, con precios distintos. `formatUnitPrice(0.0153, "g")` debe contener «15,27» y «€/kg».
+**Cambio:**
+```tsx
+{value || (income ? "Elige o escribe de dónde viene" : "Elige o escribe un comercio")}
+```
+Revisa que no haya otro `||`/`??` mezclado con un ternario sin paréntesis en ese archivo.
 
-**Fuera de alcance:** el campo «Precio / g» del formulario (`items-editor.tsx`) ya acepta 3 decimales; no tocarlo.
+## A2. Quitar los adjuntos de tickets
 
-## 2. Botón de reintentar al perder conexión
+El usuario no los necesita. Se quita la interfaz, pero **se conservan** la columna `attachment_path` y el campo `attachmentPath` del tipo `Transaction`, para no tocar la base de datos. Así, un movimiento que ya tenga adjunto lo conserva al editarlo.
 
-**Situación:** con la app instalada en el iPhone no hay botón de recargar del navegador. El store ya tiene `reload()` (`src/store/finance-store.ts:146`), que vuelve a pedir los datos y pone `error` si falla.
+1. `src/components/forms/transaction-form.tsx`:
+   - Borrar el estado `file`/`setFile` (línea ~71), el bloque `<Field label="Ticket o factura">` (~336–350) y la función `viewAttachment` (~199).
+   - En el guardado (~159–164): quitar la subida y usar `attachmentPath: candidate.attachmentPath`. Quitar el `setFile(null)` (~176).
+   - Quitar la llamada `removeAttachment` del borrado (~191).
+   - Quitar `initial?.attachmentPath` de la condición de `showMore` (~80).
+   - Quitar los imports que queden sin usar (`Paperclip`, `X` si ya no se usa).
+2. `src/components/shared.tsx:107`: quitar el icono del clip en la lista de movimientos.
+3. `src/data/repository.ts:46-48`: quitar `uploadAttachment`, `attachmentUrl` y `removeAttachment` de la interfaz. Quitar también sus implementaciones en `supabase-repository.ts` (~152–168) y `local-repository.ts` (~122–146), y cualquier test que las use.
+4. `grep -rn "attachment\|receipts" src README.md` y limpiar las menciones de la interfaz o el README (no las del tipo, la validación, los CSV o `recurring.ts`, que solo copian `null`).
+5. **No** borrar el bucket `receipts` ni la migración 0001.
 
-**Cambios:**
-1. Crear `src/components/layout/connection-banner.tsx` (componente cliente):
-   - Escucha `online`/`offline` de `window` y usa `navigator.onLine` como estado inicial.
-   - Lee `error` del store.
-   - Se muestra si no hay conexión **o** si hay `error`. Es una barra fija arriba, con `pt-safe` si existe esa utilidad; si no, `env(safe-area-inset-top)`.
-   - Textos: «Sin conexión» / «No se pudieron cargar los datos».
-   - Botón «Reintentar»: llama a `reload()`, muestra un spinner mientras tanto y, si sigue fallando, ofrece «Recargar la app» (`window.location.reload()`).
-   - Al volver el evento `online`, llamar a `reload()` automáticamente y mostrar un toast «Conexión recuperada» (sonner).
-2. Montarlo en `src/components/layout/app-shell.tsx`.
-3. Si `status === "error"` tiene ya una pantalla propia (buscar `status === "error"` en `src/`), añadirle el mismo botón «Reintentar».
-4. Probar en el navegador con DevTools → Network → Offline, y luego Online.
+---
 
-## 3. «Comercio» → «Origen» en los ingresos
+## B. Propuestas opcionales
 
-**Recomendación:** no crear un campo nuevo. Seguir usando `transaction.merchant` y cambiar solo la etiqueta y las sugerencias según el tipo. Así no hay migración y los datos antiguos siguen valiendo.
+### B1. Atajos de movimientos frecuentes (recomendado)
+Añadir un gasto habitual en el móvil cuesta demasiados toques. En Inicio, mostrar una fila de 4–6 «atajos» calculados del historial, sin tabla nueva.
+- `src/core/insights.ts`: `frequentTemplates(txs, now, limit = 6)`.
+  - Agrupar los movimientos de los últimos 90 días (no transferencias, con `status: "paid"`) por `type + normalize(concept) + merchant + categoryId`.
+  - Ordenar por número de veces y devolver `{ type, concept, merchant, categoryId, subcategoryId, accountId, paymentMethod, lastAmount, count }`.
+  - Descartar los grupos con `count < 2`. Añadir un test.
+- En Inicio (`src/app/(app)/page.tsx`), arriba en el móvil: chips con desplazamiento horizontal, sin desbordar (`overflow-x-auto`, `-mx-4 px-4`). Cada chip lleva el icono de la categoría, el concepto y el último importe.
+- Al tocar un chip se abre el formulario prellenado con fecha y hora actuales y el último importe seleccionado. Revisar `useTxDialog` en `src/store/ui-store.ts`: si `openNew` no acepta datos iniciales, añadir un parámetro opcional `initial?: Partial<Transaction>`.
 
-**Cambios:**
-1. `src/core/insights.ts`: `merchantDirectory(txs, kind?: "expense" | "income")`. Si se pasa `kind`, contar solo los movimientos de ese grupo: gasto = `expense` + `refund`; ingreso = `income`. Mantener el comportamiento actual sin parámetro.
-2. `src/components/forms/merchant-picker.tsx`: añadir la prop `kind` y pasarla a `merchantDirectory`. Textos según `kind`:
-   - Ingreso: título «Origen», placeholder «Buscar o añadir origen…», «Nuevo origen «X»», vacío «Elige o escribe de dónde viene (empresa, cliente, persona…)», icono `Building2` o `HandCoins` en vez de `Store`.
-3. `src/components/forms/transaction-form.tsx` (~línea 219):
-   - Etiqueta `tx.type === "income" ? "Origen" : "Comercio"`; pasar `kind`.
-   - Para ingresos, el concepto automático es «Ingreso de X» en vez de «Compra X».
-4. `src/app/(app)/transactions/page.tsx:210`: etiqueta «Comercio / origen» en el filtro.
-5. `src/lib/exporters.ts` y `csv-import.tsx`: renombrar la columna a «Comercio / origen». En la importación, aceptar también la cabecera antigua «Comercio».
-6. La página Comercios ya filtra por `t.type === "expense"` (`src/core/merchants.ts:49`), así que los ingresos no ensucian las comparaciones; no tocarla.
-7. Test en `src/core/products.test.ts` o en un test de insights: `merchantDirectory(txs, "income")` no devuelve comercios de gastos.
+### B2. Botón «Actualizar datos»
+La app instalada en el iPhone no tiene «deslizar para recargar».
+- En la hoja «Más» del móvil y en Ajustes, añadir un botón «Actualizar datos». Llama a `useFinance.getState().reload()` con spinner y muestra `toast.success("Datos actualizados")` o el error.
+
+### B3. Carga con esqueleto en vez de pantalla completa
+- En `app-shell.tsx`, `FullScreenLoader` tapa toda la app al arrancar. Cambiarlo por la estructura normal (cabecera, barra inferior y barra lateral) con bloques grises animados (`animate-pulse bg-muted rounded-2xl`) en el contenido.
+- Así la app parece abrir al instante.
+
+### B4. Gestos en la lista de movimientos (móvil)
+- En `src/components/shared.tsx` (fila de movimiento): al deslizar a la izquierda aparecen «Duplicar» y «Eliminar» (este último pide confirmación).
+- Hacerlo con pointer events y `transform: translateX`, sin librerías nuevas. Umbral de 72 px; deslizar en vertical no debe activarlo.
+- En escritorio no cambia nada.
+
+### B5. Productos en la barra inferior
+- Ahora la barra inferior del móvil es: Inicio · Movimientos · + · Análisis · Más.
+- Como el usuario usa mucho Productos, proponer: Inicio · Movimientos · + · Productos · Más, con Análisis dentro de «Más».
+- Es un cambio de una línea en `MOBILE_TABS` (`app-shell.tsx`). **Preguntar al usuario antes de hacerlo.**
+
+### B6. Lista de la compra (pedida por el usuario: ejecutar siempre)
+
+Lista compartida entre dispositivos, conectada con Productos: para cada artículo muestra el último precio y dónde sale más barato. Al acabar la compra, crea el movimiento con el desglose ya hecho.
+
+**Datos: tabla nueva `shopping_items`, migración 0005.** Necesita tabla para sincronizarse entre el móvil y el ordenador; `localStorage` no se sincroniza. El usuario tendrá que ejecutar el SQL en Supabase. Mientras no lo haga, la app funciona y la lista avisa de que falta la migración.
+1. `supabase/migrations/0005_shopping_list.sql`. Copia el patrón de `products` en `0002_products_balances.sql`: RLS, políticas por `user_id = auth.uid()`, el trigger de propietario y los índices. Columnas:
+   - `id uuid pk`, `user_id uuid not null`
+   - `product_id uuid null references products(id) on delete set null`
+   - `name text not null` (máx. 80)
+   - `quantity numeric null`, `note text null` (máx. 120)
+   - `checked boolean not null default false`
+   - `sort_order int not null default 0`, `created_at timestamptz default now()`
+2. Documentar la migración en el README junto a las 0001–0004.
+
+**Core y datos** (copia cómo se añadió `products` en el plan anterior):
+- `src/core/types.ts`:
+  - `ShoppingItem { id, productId: ID | null, name, quantity: number | null, note: string | null, checked: boolean, sortOrder: number, createdAt }`.
+  - Añadir `shoppingItems: ShoppingItem[]` a `FinanceData`.
+- `src/core/validation.ts`: `shoppingItemSchema`.
+- `src/data/repository.ts`:
+  - Añadir `shoppingItems` a `EntityMap`, a `ENTITY_ORDER` y a `OPTIONAL_ENTITIES`, para que, si falta la tabla, `loadAll` devuelva `[]` y marque `schemaOutdated`.
+  - Exponer el flag `shoppingSupported`, igual que `variantsSupported`.
+- `supabase-repository.ts` (tabla `shopping_items`), `local-repository.ts` (demo) y `sample.ts`: 3–4 artículos de ejemplo.
+- `src/store/finance-store.ts`: exponer `shoppingSupported`. Las altas, cambios y bajas usan el `save`/`remove` genérico existente.
+- En el aviso de `schemaOutdated` de `app-shell.tsx`, mencionar «0005 lista de la compra».
+- `src/core/shopping.ts` (puro, con tests):
+  - `shoppingInsights(items, products, txItems, txs)` → para cada artículo con producto: `lastUnitPrice` (de `lastUnitPrice()` en `products.ts`), `cheapestMerchant` (de `productStats`) y un importe estimado.
+  - `estimatedTotal(...)`.
+  - `bestMerchantForList(...)`: el comercio con más artículos de la lista que sale más barato. Si no hay datos, `null`.
+
+**Página `src/app/(app)/shopping/page.tsx`:**
+- Añadir `{ href: "/shopping", label: "Lista de la compra", icon: ListChecks }` en `NAV` (`app-shell.tsx`), después de Productos.
+- Arriba, una caja «Añadir a la lista»:
+  - Reutiliza el selector de productos del desglose (`ProductPicker` de `items-editor.tsx`). Si no se puede reutilizar tal cual, extráelo a su propio archivo.
+  - Se puede elegir un producto o escribir texto libre (`productId: null`).
+  - Al pulsar Enter se añade y el campo se vacía.
+- Lista de pendientes:
+  - Cada fila lleva un check grande (48 px de alto en el móvil), el nombre, la cantidad editable y, en gris, «último 1,20 € · más barato en Spar».
+  - Tocar la fila la marca o desmarca, con un cambio optimista.
+- Sección plegable «En el carro (n)» con los marcados (tachados), y el botón «Quitar marcados».
+- Pie fijo en el móvil, por encima de la barra inferior:
+  - «Estimado: 23,40 €» y, si existe, «Te sale más barato en HiperDino».
+  - Botón «Terminar compra»: abre el formulario de movimiento con tipo Gasto y comercio = el mejor (o vacío). El desglose viene precargado con los artículos marcados que tienen producto: cantidad 1 o la indicada, y el último precio.
+  - Al guardar el movimiento, borrar los marcados de la lista. Necesitarás que `useTxDialog.openNew` acepte `initial` e `items` iniciales, y una devolución al guardar, o un flag en `ui-store`. Elige lo más simple.
+- Si `shoppingSupported` es falso: estado vacío con el aviso «Ejecuta la migración 0005 en Supabase → SQL Editor».
+- Diseño coherente con la página de Productos: tarjetas `rounded-2xl`, `tabular` en los importes y sin desbordar en 375 px.
+
+**Accesos extra:**
+- En el detalle de un producto (`products/page.tsx`), botón «Añadir a la lista».
+- Atajo en el `CommandPalette` si es fácil.
+
+**Pruebas:**
+- Tests de `shopping.ts`.
+- Comprobar en la demo, a 375 px: añadir, marcar, «Terminar compra», y que el movimiento se crea con el desglose y la lista se limpia.
 
 ---
 
 ## Cierre
-- Ejecutar `npm run check` y `npx next build`.
-- Hacer commit con un mensaje en español. El hook pre-push vuelve a pasar `npm run check`.
-- Probar en móvil (375 px): en la página de productos, Fideos instantáneos debe mostrar los precios en €/kg (Kung-Fu, Yakisoba ≈ 15,27 €/kg, Maggi ≈ 21,89 €/kg). Al crear un ingreso debe salir «Origen».
+- `npm run check` y `npx next build`.
+- Si el servidor de desarrollo crea un `AGENTS.md` en la raíz, bórralo antes del commit.
+- Commit en español y push. El hook pre-push ejecuta `npm run check`.

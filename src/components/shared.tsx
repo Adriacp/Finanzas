@@ -1,10 +1,11 @@
 "use client";
-import { ArrowLeftRight, Paperclip, Repeat, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeftRight, Copy, Repeat, RotateCcw, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { toast } from "sonner";
 import { create } from "zustand";
 import { type DateRange, PERIOD_LABELS, type PeriodKey, periodRange, relativeDayLabel, todayISO } from "@/core/dates";
 import type { Account, Category, Transaction } from "@/core/types";
-import { useData } from "@/store/finance-store";
+import { useData, useFinance } from "@/store/finance-store";
 import { useTxDialog } from "@/store/ui-store";
 import { Button } from "@/components/ui/button";
 import { IconBadge } from "@/components/ui/icon";
@@ -88,8 +89,63 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
   const account = acc.get(t.accountId ?? "");
   const to = acc.get(t.toAccountId ?? "");
   const isTransfer = t.type === "transfer";
+  const openDuplicate = useTxDialog((s) => s.openDuplicate);
+  const removeTx = useFinance((s) => s.remove);
+
+  // Deslizar a la izquierda (solo táctil, en móvil) descubre «Duplicar» y «Eliminar»
+  const ACTIONS_W = 144;
+  const OPEN_AT = 72;
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ x: number; y: number; start: number; mode: "idle" | "h" | "v" } | null>(null);
+  const swiped = useRef(false);
+  const clamp = (v: number) => Math.max(-ACTIONS_W, Math.min(0, v));
+
+  function onDown(e: ReactPointerEvent) {
+    if (e.pointerType !== "touch" || window.innerWidth >= 1024) return;
+    drag.current = { x: e.clientX, y: e.clientY, start: offset, mode: "idle" };
+    swiped.current = false;
+  }
+  function onMove(e: ReactPointerEvent) {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (d.mode === "idle") {
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { d.mode = "v"; return; }
+      if (Math.abs(dx) > 8) { d.mode = "h"; setDragging(true); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }
+      else return;
+    }
+    if (d.mode === "h") { swiped.current = true; setOffset(clamp(d.start + dx)); }
+  }
+  function onUp() {
+    const d = drag.current;
+    drag.current = null;
+    setDragging(false);
+    if (d?.mode === "h") setOffset((o) => (o <= -OPEN_AT ? -ACTIONS_W : 0));
+  }
+  async function onDelete() {
+    if (!confirm(`¿Eliminar «${t.concept}»? Esta acción no se puede deshacer.`)) return setOffset(0);
+    try { await removeTx("transactions", t.id); toast.success("Movimiento eliminado"); }
+    catch (e) { setOffset(0); toast.error("No se pudo eliminar", { description: e instanceof Error ? e.message : undefined }); }
+  }
+
   return (
-    <div className={cn("group flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted/70", selected && "bg-accent/60")}>
+    <div className="relative overflow-hidden rounded-xl">
+      <div className="absolute inset-y-0 right-0 flex lg:hidden" style={{ width: ACTIONS_W }} aria-hidden={offset === 0}>
+        <button type="button" tabIndex={offset === 0 ? -1 : 0} onClick={() => { setOffset(0); openDuplicate(t); }}
+          className="flex flex-1 flex-col items-center justify-center gap-1 bg-primary text-xs font-medium text-primary-foreground cursor-pointer"><Copy className="size-4" /> Duplicar</button>
+        <button type="button" tabIndex={offset === 0 ? -1 : 0} onClick={onDelete}
+          className="flex flex-1 flex-col items-center justify-center gap-1 bg-expense text-xs font-medium text-white cursor-pointer"><Trash2 className="size-4" /> Eliminar</button>
+      </div>
+    <div
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+      onClickCapture={(e) => {
+        if (swiped.current) { e.preventDefault(); e.stopPropagation(); swiped.current = false; }
+        else if (offset !== 0) { e.preventDefault(); e.stopPropagation(); setOffset(0); }
+      }}
+      style={{ transform: offset ? `translateX(${offset}px)` : undefined, transition: dragging ? "none" : "transform 160ms ease-out", background: offset ? "var(--card)" : undefined }}
+      className={cn("group flex touch-pan-y items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-muted/70", selected && "bg-accent/60")}>
       {onSelect && (
         <input type="checkbox" checked={!!selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Seleccionar ${t.concept}`}
           className="size-4 shrink-0 accent-[var(--primary)] cursor-pointer" />
@@ -104,7 +160,6 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
           <p className="flex items-center gap-1.5 truncate text-sm font-medium">
             <span className="truncate">{t.concept}</span>
             {t.isRecurring && <Repeat className="size-3 shrink-0 text-muted-foreground" aria-label="Recurrente" />}
-            {t.attachmentPath && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label="Con adjunto" />}
             {t.type === "refund" && <RotateCcw className="size-3 shrink-0 text-income" aria-label="Reembolso" />}
           </p>
           <p className="truncate text-xs text-muted-foreground">
@@ -120,6 +175,7 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
           ) : null}
         </div>
       </button>
+    </div>
     </div>
   );
 }

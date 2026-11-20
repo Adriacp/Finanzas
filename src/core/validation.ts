@@ -115,3 +115,10 @@ export const productSchema = z.object({
   parentId: id.nullable().optional(),
   packageSize: z.number().positive("El formato debe ser mayor que 0").max(1e6).nullable().optional(),
 });
+
+export const shoppingItemSchema = z.object({
+  name: z.string().trim().min(1, "Escribe un nombre").max(80, "Máximo 80 caracteres"),
+  productId: id.nullable(),
+  quantity: z.number().positive("La cantidad debe ser mayor que 0").max(1e6).nullable(),
+  note: optText(120),
+});

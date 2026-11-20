@@ -1,6 +1,8 @@
 "use client";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Search, ShoppingBasket, Store, TrendingDown, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, ListChecks, Pencil, Plus, Search, ShoppingBasket, Store, TrendingDown, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { newId } from "@/data/repository";
 import { useMemo, useState } from "react";
 import { formatDate, PERIOD_LABELS, type PeriodKey, periodRange } from "@/core/dates";
 import { normalize } from "@/core/insights";
@@ -144,6 +146,8 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
   const d = useData();
   const fmt = useMoney();
   const variantsSupported = useFinance((x) => x.variantsSupported);
+  const shoppingSupported = useFinance((x) => x.shoppingSupported);
+  const saveRow = useFinance((x) => x.save);
   const openEdit = useTxDialog((x) => x.openEdit);
   const unit = s.product.unit;
   const history = [...s.purchases].reverse().map((p) => ({ date: p.date, price: p.unitPrice, merchant: p.merchant }));
@@ -169,6 +173,16 @@ function ProductDetail({ s, onEdit, onOpen, onAddVariant, periodLabel }: {
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={onEdit}><Pencil /> Editar</Button>
           {isGeneric && variantsSupported && <Button variant="secondary" size="sm" onClick={onAddVariant}><Plus /> Marca / variante</Button>}
+          {shoppingSupported && (
+            <Button variant="secondary" size="sm" onClick={async () => {
+              const same = d.shoppingItems.find((i) => !i.checked && i.productId === s.product.id);
+              try {
+                await saveRow("shoppingItems", same ? { ...same, quantity: (same.quantity ?? 1) + 1 }
+                  : { id: newId(), productId: s.product.id, name: s.product.name, quantity: 1, note: null, checked: false, sortOrder: d.shoppingItems.reduce((m, i) => Math.max(m, i.sortOrder), -1) + 1 });
+                toast.success(`${s.product.name} añadido a la lista de la compra`);
+              } catch (e) { toast.error("No se pudo añadir", { description: e instanceof Error ? e.message : undefined }); }
+            }}><ListChecks /> Añadir a la lista</Button>
+          )}
           <Link href={`/transactions?product=${s.product.id}`}><Button variant="secondary" size="sm">Ver movimientos <ArrowRight /></Button></Link>
         </div>
       </div>

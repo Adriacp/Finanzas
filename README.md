@@ -37,9 +37,9 @@ En *Ajustes → Cargar datos de ejemplo* tienes 6 meses de datos realistas. **No
 ## 2. Configurar Supabase (persistencia real y multi-dispositivo)
 
 1. Crea un proyecto en <https://supabase.com> (el plan gratuito sirve).
-2. **SQL Editor → New query**: pega y ejecuta, en orden, `supabase/migrations/0001_init.sql`, `0002_products_balances.sql`, `0003_product_variants.sql` y `0004_item_package_size.sql`
-   (la 0002 añade productos, desglose y confirmación de saldos; la 0003, marcas/variantes; la 0004, el formato del envase en cada compra; todas se pueden ejecutar más de una vez sin problema).
-   Crea las tablas, índices, Row Level Security, el trigger de perfil y el bucket privado `receipts` para los tickets.
+2. **SQL Editor → New query**: pega y ejecuta, en orden, `supabase/migrations/0001_init.sql`, `0002_products_balances.sql`, `0003_product_variants.sql`, `0004_item_package_size.sql` y `0005_shopping_list.sql`
+   (la 0002 añade productos, desglose y confirmación de saldos; la 0003, marcas/variantes; la 0004, el formato del envase en cada compra; la 0005, la lista de la compra; todas se pueden ejecutar más de una vez sin problema).
+   Crea las tablas, índices, Row Level Security, el trigger de perfil.
 3. **Project Settings → API**: copia la *Project URL* y la *anon public key* en `.env.local`:
 
    | Variable | Valor |
@@ -118,7 +118,7 @@ public/sw.js        ← Service worker (PWA)
 | Área | Estado |
 |---|---|
 | Dashboard (patrimonio, disponible, ingresos/gastos/balance, % ahorro, comparación con periodo anterior, pendientes, presupuestos, últimos movimientos, categorías, evolución) con 9 periodos | ✅ |
-| Movimientos: alta rápida (botón + tecla `N`), editar, duplicar, eliminar, selección múltiple, todos los campos pedidos, adjunto de ticket (foto/PDF) | ✅ |
+| Movimientos: alta rápida (botón + tecla `N`), editar, duplicar, eliminar, selección múltiple, todos los campos pedidos | ✅ |
 | Categorías y subcategorías: crear, editar, eliminar (con reasignación de movimientos), reordenar, icono, color, descripción, necesario/prescindible | ✅ |
 | Cuentas: tipos, entidad, saldo inicial, saldo calculado, moneda, color, archivar; transferencias neutras | ✅ |
 | Presupuestos global / categoría / subcategoría, generales o de un mes, avisos 50/75/90/100 %, historial y gráfico | ✅ |
@@ -142,7 +142,6 @@ public/sw.js        ← Service worker (PWA)
 - **Recurrentes**: los cobros se registran con un toque (o “Registrar todos” los vencidos); no se generan solos en segundo plano
   (requeriría un cron en Supabase, ver hoja de ruta).
 - **CSV**: se asume UTF-8. Si tu banco exporta en Latin-1 y ves caracteres raros, vuelve a guardarlo como UTF-8.
-- La copia de seguridad JSON no incluye los archivos adjuntos (siguen en Supabase Storage).
 - Sin sincronización en tiempo real: los cambios de otro dispositivo aparecen al volver a abrir/enfocar la app.
 
 ---

@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDown, ShoppingBasket, Copy, Paperclip, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, ShoppingBasket, Copy, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatDate, relativeDayLabel, todayISO } from "@/core/dates";
@@ -55,29 +55,29 @@ export function TransactionDialog() {
 }
 
 function TransactionForm() {
-  const { initial, mode, close, openDuplicate, sourceId } = useTxDialog();
+  const { initial, mode, close, openDuplicate, sourceId, initialItems } = useTxDialog();
   const data = useFinance((s) => s.data)!;
-  const { saveTransaction, remove, repo, schemaOutdated } = useFinance();
+  const { saveTransaction, remove, schemaOutdated } = useFinance();
   const fmt = useMoney();
   const defaultAccount = data.accounts.find((a) => !a.archived)?.id ?? null;
   const [tx, setTx] = useState<Omit<Transaction, "id"> & { id?: string }>(() => ({ ...blank(defaultAccount), ...(initial ?? {}) }));
   const [amountText, setAmountText] = useState(initial?.amount ? String(initial.amount).replace(".", ",") : "");
   // true cuando el importe lo ha calculado el desglose (suma de líneas) y no el usuario
-  const [amountAuto, setAmountAuto] = useState(false);
+  const [amountAuto, setAmountAuto] = useState(() => mode === "create" && !!initialItems?.length);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [futureAsk, setFutureAsk] = useState<{ again: boolean } | null>(null);
   const [quickCat, setQuickCat] = useState<{ parentId: string | null } | null>(null);
-  const [file, setFile] = useState<File | null>(null);
   // Desglose por productos (opcional): al editar se carga el existente; al duplicar se copia
   const [items, setItems] = useState<TransactionItem[]>(() => {
+    if (mode === "create" && initialItems?.length) return initialItems.map((i) => ({ ...i, id: newId() }));
     const src = mode === "edit" ? initial?.id : sourceId;
     if (!src) return [];
     const list = data.transactionItems.filter((i) => i.transactionId === src).sort((a, b) => a.sortOrder - b.sortOrder);
     return mode === "edit" ? list : list.map((i) => ({ ...i, id: newId() }));
   });
   const [showItems, setShowItems] = useState(() => items.length > 0);
-  const [showMore, setShowMore] = useState(mode === "edit" && !!(initial?.merchant || initial?.notes || initial?.tags?.length || initial?.description || initial?.attachmentPath));
+  const [showMore, setShowMore] = useState(mode === "edit" && !!(initial?.merchant || initial?.notes || initial?.tags?.length || initial?.description));
   const categoryTouched = useRef(mode === "edit" || !!initial?.categoryId);
   const accountTouched = useRef(mode === "edit" || !!initial?.accountId);
   /** Último movimiento en ese comercio (para proponer su cuenta y forma de pago habituales) */
@@ -156,13 +156,9 @@ function TransactionForm() {
     if (opts.status) set("status", opts.status);
     setSaving(true);
     try {
-      let attachmentPath = candidate.attachmentPath;
-      if (file && repo) {
-        attachmentPath = await repo.uploadAttachment(file);
-        if (candidate.attachmentPath) repo.removeAttachment(candidate.attachmentPath).catch(() => {});
-      }
-      const row: Transaction = { ...candidate, ...parsed.data, attachmentPath, id: tx.id ?? newId(), createdAt: tx.createdAt };
+      const row: Transaction = { ...candidate, ...parsed.data, id: tx.id ?? newId(), createdAt: tx.createdAt };
       const alerts = await saveTransaction(row, row.type === "expense" ? items : []);
+      useTxDialog.getState().onSaved?.();
       toast.success(mode === "edit" ? "Movimiento actualizado" : "Movimiento guardado", { description: `${row.concept} · ${fmt(row.amount)}` });
       for (const a of alerts) {
         const msg = a.threshold! >= 100 ? `Has superado el presupuesto de ${a.name}` : `Has consumido el ${a.threshold} % del presupuesto de ${a.name}`;
@@ -173,7 +169,6 @@ function TransactionForm() {
         setAmountText("");
         setAmountAuto(false);
         setItems([]);
-        setFile(null);
         categoryTouched.current = false;
         amountRef.current?.focus();
       } else close();
@@ -188,22 +183,10 @@ function TransactionForm() {
     if (!tx.id || !confirm("¿Eliminar este movimiento? Esta acción no se puede deshacer.")) return;
     try {
       await remove("transactions", tx.id);
-      if (tx.attachmentPath) repo?.removeAttachment(tx.attachmentPath).catch(() => {});
       toast.success("Movimiento eliminado");
       close();
     } catch (e) {
       toast.error("No se pudo eliminar", { description: e instanceof Error ? e.message : undefined });
-    }
-  }
-
-  async function viewAttachment() {
-    if (!tx.attachmentPath || !repo) return;
-    try {
-      const url = await repo.attachmentUrl(tx.attachmentPath);
-      const w = window.open();
-      if (w) { w.opener = null; w.location.href = url; }
-    } catch (e) {
-      toast.error("No se pudo abrir el adjunto", { description: e instanceof Error ? e.message : undefined });
     }
   }
 
@@ -334,21 +317,6 @@ function TransactionForm() {
             <Switch checked={tx.isFixed} onChange={(v) => set("isFixed", v)} label="Gasto fijo" description="Desactívalo si es un gasto variable" />
             <Switch checked={tx.isRecurring} onChange={(v) => set("isRecurring", v)} label="Recurrente" description="Se repite periódicamente" />
           </div>
-          <Field label="Ticket o factura" hint="Imagen o PDF (máx. 10 MB)">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-input px-3 text-sm hover:bg-muted">
-                <Paperclip className="size-4" /> {file ? file.name : tx.attachmentPath ? "Reemplazar archivo" : "Adjuntar o hacer foto"}
-                <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              </label>
-              {file && <Button variant="ghost" size="icon-sm" onClick={() => setFile(null)} aria-label="Quitar archivo"><X /></Button>}
-              {tx.attachmentPath && !file && (
-                <>
-                  <Button variant="secondary" size="sm" onClick={viewAttachment}>Ver adjunto</Button>
-                  <Button variant="ghost" size="sm" onClick={() => set("attachmentPath", null)}>Quitar</Button>
-                </>
-              )}
-            </div>
-          </Field>
         </div>
       )}
 
