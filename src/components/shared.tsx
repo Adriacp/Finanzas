@@ -113,8 +113,10 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
     const dy = e.clientY - d.y;
     if (d.mode === "idle") {
       if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { d.mode = "v"; return; }
-      if (Math.abs(dx) > 8) { d.mode = "h"; setDragging(true); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }
-      else return;
+      if (Math.abs(dx) <= 8) return;
+      // Con la fila cerrada, deslizar a la derecha no hace nada (y no compite con el gesto «atrás» de iOS)
+      if (d.start === 0 && dx > 0) { d.mode = "v"; return; }
+      d.mode = "h"; setDragging(true); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
     if (d.mode === "h") { swiped.current = true; setOffset(clamp(d.start + dx)); }
   }
@@ -137,7 +139,7 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
   return (
     <div className="relative overflow-hidden rounded-xl">
       {/* Solo existen mientras la fila está desplazada: la fila es transparente y en reposo se verían a través */}
-      {(offset !== 0 || dragging) && (
+      {offset < 0 && (
         <div className="absolute inset-y-0 right-0 flex lg:hidden" style={{ width: ACTIONS_W }}>
           <button type="button" onClick={() => { setOffset(0); openDuplicate(t); }}
             className="flex flex-1 flex-col items-center justify-center gap-1 bg-primary text-xs font-medium text-primary-foreground cursor-pointer"><Copy className="size-4" /> Duplicar</button>
