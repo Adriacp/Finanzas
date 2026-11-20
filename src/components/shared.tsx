@@ -122,7 +122,11 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
     const d = drag.current;
     drag.current = null;
     setDragging(false);
-    if (d?.mode === "h") setOffset((o) => (o <= -OPEN_AT ? -ACTIONS_W : 0));
+    if (d?.mode === "h") {
+      setOffset((o) => (o <= -OPEN_AT ? -ACTIONS_W : 0));
+      // Solo se ignora el clic que el navegador pueda disparar justo al soltar; el siguiente toque ya cuenta
+      setTimeout(() => { swiped.current = false; }, 80);
+    }
   }
   async function onDelete() {
     if (!confirm(`¿Eliminar «${t.concept}»? Esta acción no se puede deshacer.`)) return setOffset(0);
@@ -132,12 +136,15 @@ export function TransactionRow({ t, onClick, selected, onSelect }: { t: Transact
 
   return (
     <div className="relative overflow-hidden rounded-xl">
-      <div className="absolute inset-y-0 right-0 flex lg:hidden" style={{ width: ACTIONS_W }} aria-hidden={offset === 0}>
-        <button type="button" tabIndex={offset === 0 ? -1 : 0} onClick={() => { setOffset(0); openDuplicate(t); }}
-          className="flex flex-1 flex-col items-center justify-center gap-1 bg-primary text-xs font-medium text-primary-foreground cursor-pointer"><Copy className="size-4" /> Duplicar</button>
-        <button type="button" tabIndex={offset === 0 ? -1 : 0} onClick={onDelete}
-          className="flex flex-1 flex-col items-center justify-center gap-1 bg-expense text-xs font-medium text-white cursor-pointer"><Trash2 className="size-4" /> Eliminar</button>
-      </div>
+      {/* Solo existen mientras la fila está desplazada: la fila es transparente y en reposo se verían a través */}
+      {(offset !== 0 || dragging) && (
+        <div className="absolute inset-y-0 right-0 flex lg:hidden" style={{ width: ACTIONS_W }}>
+          <button type="button" onClick={() => { setOffset(0); openDuplicate(t); }}
+            className="flex flex-1 flex-col items-center justify-center gap-1 bg-primary text-xs font-medium text-primary-foreground cursor-pointer"><Copy className="size-4" /> Duplicar</button>
+          <button type="button" onClick={onDelete}
+            className="flex flex-1 flex-col items-center justify-center gap-1 bg-expense text-xs font-medium text-white cursor-pointer"><Trash2 className="size-4" /> Eliminar</button>
+        </div>
+      )}
     <div
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
       onClickCapture={(e) => {
